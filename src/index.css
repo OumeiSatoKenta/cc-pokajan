@@ -1,0 +1,70 @@
+/*
+ * 共通テーマ変数。全画面がここを var() で参照するため、卓の見た目もここで決まる。
+ * 木縁（--rim）＋羅紗（--felt）＋金（--accent）のカジノ基調。
+ * 値の一次資料は外注デザイン第2稿（THEMES.dark / THEMES.light）。
+ */
+:root {
+  /* 既存の役割を保つ6変数（名前は変えない。全 CSS が参照している） */
+  --bg: #100c09;
+  --panel: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.14);
+  --text: #f2ece1;
+  --muted: #a99f8d;
+  --accent: #d9a441;
+
+  /* カジノ卓用に追加した変数 */
+  --gold-soft: rgba(217, 164, 65, 0.45);
+  --felt: radial-gradient(90% 80% at 50% 40%, #1b6249, #124637 55%, #0a2b21);
+  --felt-edge: rgba(0, 0, 0, 0.4);
+  --rim: linear-gradient(180deg, #4b3520, #2a1c0e);
+  --slot: rgba(0, 0, 0, 0.32);
+  /* 淡い金の下地。記号（スート）や小さなパネル（待ち一覧など）に使う。 */
+  --sym-bg: rgba(217, 164, 65, 0.16);
+  --card-back: repeating-linear-gradient(45deg, #8d2536 0 4px, #761d2c 4px 8px);
+  --card-back-edge: rgba(240, 217, 160, 0.28);
+  /* 対局中の操作エリアの下地と枠（羅紗の上に薄く敷く。第2稿 --actionBg/--actionBd）。 */
+  --action-bg: rgba(0, 0, 0, 0.3);
+  --action-border: rgba(255, 255, 255, 0.1);
+
+  font-family:
+    system-ui,
+    -apple-system,
+    'Hiragino Sans',
+    'Noto Sans JP',
+    sans-serif;
+  line-height: 1.6;
+  color-scheme: dark light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #e9e2d4;
+    --panel: rgba(255, 255, 255, 0.72);
+    --border: rgba(0, 0, 0, 0.16);
+    --text: #22201b;
+    --muted: #6f6759;
+    --accent: #9a6d16;
+
+    --gold-soft: rgba(154, 109, 22, 0.4);
+    --felt: radial-gradient(90% 80% at 50% 40%, #3f9a76, #2f8060 55%, #246650);
+    --felt-edge: rgba(255, 255, 255, 0.25);
+    --rim: linear-gradient(180deg, #c9a271, #a87f4d);
+    --slot: rgba(255, 255, 255, 0.7);
+    --sym-bg: rgba(154, 109, 22, 0.16);
+    --card-back: repeating-linear-gradient(45deg, #b2495a 0 4px, #9c3b4c 4px 8px);
+    --card-back-edge: rgba(255, 255, 255, 0.5);
+    --action-bg: rgba(255, 255, 255, 0.62);
+    --action-border: rgba(0, 0, 0, 0.14);
+  }
+}

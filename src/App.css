@@ -1,0 +1,345 @@
+/*
+ * アプリ全体で共有する土台のスタイル。
+ * 対局画面固有のものは src/ui/table.css にある。
+ */
+
+.app {
+  min-height: 100vh;
+}
+
+.app__header {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1rem 0.75rem 0;
+}
+
+.app__title {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
+}
+
+/* --- ボタン --- */
+
+.button {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  /* 押下感を全ボタン共通で持たせる。フィル系の色と影は各変種が足す。 */
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 押すと少し沈む。全画面のボタンに効く（reduced-motion で無効化）。 */
+.button:active {
+  transform: translateY(1px);
+}
+
+/*
+ * 塗りつぶしの主ボタン（金）。タイトル/BET/精算/設定/対局で共通に使う app 共通変種。
+ * かつては table.css にあり「対局画面用のはず」と読み違えやすかったため App.css に集約した。
+ * **文字は濃色**。金地に白は約2.25:1で不可読（9-1 の `.wait__same` と同じ轍を踏まない）。
+ */
+.button--primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f4d78f, #d9a441);
+  color: #1b1b22;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.35);
+}
+
+.button--primary:hover {
+  color: #1b1b22;
+  opacity: 0.9;
+}
+
+/* 副次のゴースト。透明背景・枠のみ・影なし（フィル系と対比させる）。 */
+.button--ghost {
+  color: var(--muted);
+}
+
+/* 押下の沈み込みは動きを減らす設定では無効化する。 */
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}
+
+/* --- タグ --- */
+
+.tag {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #1b1b22;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* --- カード --- */
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 4.25rem;
+  height: 6rem;
+  /* 下を厚くして、名前が右下の記号と重ならないようにする。 */
+  padding: 0.4rem 0.35rem 0.95rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(0 0 0 / 0.25);
+  color: #22222b;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/*
+ * 河と伏せ札の小さいカード。手札と「同じものが違う大きさで出ている」ことに意味があるので、
+ * 別コンポーネントには分けずサイズだけを変える。
+ */
+.card--small {
+  width: 2.4rem;
+  height: 3.4rem;
+  padding: 0.15rem 0.15rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.52rem;
+}
+
+.card--small .card__corner {
+  font-size: 0.45rem;
+  padding: 0;
+}
+
+.card--small .card__corner--tl {
+  top: 0.1rem;
+  left: 0.12rem;
+}
+
+.card--small .card__corner--br {
+  right: 0.12rem;
+  bottom: 0.1rem;
+}
+
+.card--small .card__bonus {
+  display: none;
+}
+
+/* 色を持たないタイル（ボーナス表示）。カードと同じ形で中立色にする。 */
+.card--tile {
+  background: linear-gradient(160deg, #fdf6e3, #f0e4c8);
+  border-color: rgb(0 0 0 / 0.3);
+}
+
+/*
+ * 原作のリーチ表示（あと1枚で役が完成するカード）を再現する。
+ * 金基調の卓では黄色枠（#ffd34d）がアクセントの金に埋もれるため、白熱色（#ffe58a）＋
+ * 外側グローで輝度差をつけ、さらに恒常的に持ち上げて浮かせる。
+ * **面の色は塗り替えない**（面の色＝同色役の判定情報。塗ると狙える色が読めなくなる）。
+ * 持ち上げ分は手札側（table.css の .hand）に padding-top を確保してある。
+ */
+.card--waiting {
+  border-color: #ffe58a;
+  box-shadow:
+    0 0 0 2px #ffe58a,
+    0 0 16px rgb(255 229 138 / 0.75),
+    0 10px 18px rgb(0 0 0 / 0.45);
+  transform: translateY(-12px);
+}
+
+/*
+ * 待ち札は自分の手番ではクリック可能（.card--clickable）にもなる。
+ * `.card--clickable:hover` の translateY(-6px) は詳細度(0,2,0)で
+ * `.card--waiting`(0,1,0)に勝つため、素のままだと待ち札にマウスを乗せた瞬間
+ * （＝残枚数を読む主要操作）に持ち上げが -12px → -6px へ沈む。詳細度(0,3,0)で
+ * 上書きして持ち上げを維持する。reduced-motion 時の `.card--clickable:hover
+ * { transform: none }` もこの規則が上回るので、持ち上げ（静的な位置）は保たれる。
+ */
+.card--clickable.card--waiting:hover {
+  transform: translateY(-12px);
+}
+
+/*
+ * 河の直前の1枚（ロン対象）。待ち札と同じ白熱色だが**持ち上げはしない**
+ * （河の小カードで、位置ではなく枠とグローだけで最新の1枚を示す）。面の色は残す。
+ */
+.card--last {
+  border-color: #ffe58a;
+  box-shadow:
+    0 0 0 2px #ffe58a,
+    0 0 10px rgb(255 229 138 / 0.7);
+}
+
+.card__bonus {
+  position: absolute;
+  top: 0.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  background: #1b1b22;
+  color: #f0d264;
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
+}
+
+.card--pink {
+  background: linear-gradient(160deg, #ffd4e2, #f7a8c4);
+}
+
+.card--blue {
+  background: linear-gradient(160deg, #d2e6ff, #a3c6f5);
+}
+
+.card--orange {
+  background: linear-gradient(160deg, #ffe2c2, #f7bd85);
+}
+
+.card__name {
+  position: relative;
+  z-index: 1;
+  padding: 0.05rem 0.2rem;
+  border-radius: 0.25rem;
+  /* 画像の上でも読めるようにうっすら敷く。画像が無いときはほぼ見えない。 */
+  background: rgb(255 255 255 / 0.72);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * アップロードした画像。**切り取らない**（`cover` にすると保存時に切らなかった意味がなくなる）。
+ * カードの縦横比と画像の縦横比は違うので、余白ができるのは意図どおり。
+ */
+.card__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.4rem;
+  background: rgb(255 255 255 / 0.35);
+}
+
+/* --- グループ記号（トランプのスート相当） --- */
+
+.card__corner {
+  position: absolute;
+  z-index: 1;
+  padding: 0 0.1rem;
+  border-radius: 0.2rem;
+  background: rgb(255 255 255 / 0.72);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #22222b;
+}
+
+.card__corner--tl {
+  top: 0.2rem;
+  left: 0.2rem;
+}
+
+/* トランプと同じく右下は 180 度回す。 */
+.card__corner--br {
+  right: 0.2rem;
+  bottom: 0.2rem;
+  transform: rotate(180deg);
+}
+
+/* 保存された設定を採用できなかったことの案内。 */
+.app__notice {
+  max-width: 28rem;
+  margin: 0 auto 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e8c56a;
+  border-radius: 0.5rem;
+  color: #e8c56a;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* --- 伏せ札 --- */
+
+.card-backs {
+  display: flex;
+  gap: 0.12rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-backs--horizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+/* 左右の席では縦に積む。 */
+.card-backs--vertical {
+  flex-direction: column;
+}
+
+/*
+ * 縦積みは回転ではなく**寸法の入れ替え**で作る。
+ * `transform: rotate(90deg)` はレイアウトボックスを変えないため、
+ * 幅 1.5rem のまま高さ 2.2rem がはみ出し、余白で辻褄を合わせることになる。
+ * 伏せ札は中身を描かないので、入れ替えるだけで同じ絵になる。
+ */
+.card-backs--vertical .card--back {
+  width: 2.2rem;
+  height: 1.5rem;
+}
+
+/*
+ * 伏せ札は中身を一切描かないので、面の模様だけで成立する。
+ * 名前を入れる必要がないぶん通常の小カードより細くでき、
+ * 規定枚数（7枚）が1行に収まる。
+ */
+.card--back {
+  width: 1.5rem;
+  height: 2.2rem;
+  padding: 0;
+  background: var(--card-back);
+  border-color: var(--card-back-edge);
+}
+
+/* --- ボーナスのタイル --- */
+
+.member-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.member-tile__label {
+  font-size: 0.62rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.member-tile .card {
+  width: 2.8rem;
+  height: 3.9rem;
+  padding: 0.15rem 0.15rem 0.3rem;
+  border-radius: 0.35rem;
+  font-size: 0.55rem;
+}

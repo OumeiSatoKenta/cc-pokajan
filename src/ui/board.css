@@ -1,0 +1,305 @@
+/*
+ * 卓（盤面）のレイアウト＝卓枠（木縁・羅紗）・席・河。
+ *
+ * 卓中央の情報集約は `center.css`、手札・操作バー・演出は `table.css`、横向きは `landscape.css`。
+ * 分けているのは行数の都合だけでなく、「卓の上に何がどう置かれるか」と
+ * 「自分が何を操作するか」が別の関心だから。
+ */
+
+.table {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 58rem;
+  margin: 1rem auto;
+  padding: 0.75rem;
+  /* 木縁。羅紗（.table__felt）を内側に抱く額縁として見せる。 */
+  border-radius: 1.4rem;
+  background: var(--rim);
+  box-shadow:
+    0 26px 60px rgb(0 0 0 / 0.55),
+    inset 0 1px 0 rgb(255 220 160 / 0.18);
+}
+
+/*
+ * 羅紗（フェルト）。盤面（.table__board）を1枚で包む。
+ * 盤面のグリッドや席の配置には手を触れず、背景と縁だけを与える。
+ */
+.table__felt {
+  border-radius: 1rem;
+  padding: 0.6rem;
+  background: var(--felt);
+  box-shadow:
+    inset 0 0 60px rgb(0 0 0 / 0.45),
+    inset 0 0 0 2px var(--felt-edge);
+}
+
+/* --- 卓の骨格 --- */
+
+/*
+ * 麻雀の卓と同じ配置にする。対面が上、上家が左、下家が右、自分が下。
+ * 位置そのものが情報（上家は自分にカードが回ってくる相手、
+ * 下家は自分の捨て札が渡る相手）なので、横並びだとこれが読めない。
+ */
+.table__board {
+  display: grid;
+  grid-template-areas:
+    'top    top    top'
+    'left   center right'
+    'bottom bottom bottom';
+  /*
+   * 中央を `minmax(0, …)` にするのが要点。既定の `auto` だと中のグループ一覧の
+   * 最小コンテンツ幅が中央列を押し広げ、左右の席が潰れる。
+   */
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 2.2fr) minmax(8rem, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+/* 卓のどこに何が入るか。配置の定義はこの5行に集める。 */
+.seat--top {
+  grid-area: top;
+}
+
+.seat--left {
+  grid-area: left;
+}
+
+.seat--right {
+  grid-area: right;
+}
+
+.board {
+  grid-area: center;
+}
+
+/*
+ * 手札（.table__mine）と操作バー（.actions）をまとめる下段ラッパ。
+ * 縦では従来どおり縦積み（手札 → 操作）。横向きは landscape.css で [手札 | 操作] のレールにする。
+ * 操作バーはここに入って felt 内に来る（第2稿も操作エリアは手札の右）。
+ */
+.table__controls {
+  grid-area: bottom;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* --- 他家の席 --- */
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--slot);
+  font-size: 0.78rem;
+}
+
+/* 手番と宣言権者を色で区別する。ロンの連続宣言中は両者が食い違う。 */
+.seat--turn {
+  border-color: var(--accent);
+}
+
+.seat--declarer {
+  border-color: #ffd34d;
+}
+
+.seat__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.1rem 0.35rem;
+}
+
+.seat__name {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/*
+ * 座席アバター。**未設定でも成立する**ので、無いときは要素ごと描かれない
+ * （空の枠を残すと「設定し忘れ」に見える）。
+ */
+.seat__avatar {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+.table__mine-title .seat__avatar {
+  width: 2rem;
+  height: 2rem;
+  margin-right: 0.4rem;
+}
+
+.seat__score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.seat__meta {
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+/* 対面は横幅を使えるので、伏せ札と河を中央にそろえる。 */
+.seat--top {
+  align-items: center;
+}
+
+/*
+ * 対面の見出しは中央に寄せる。左右の席と同じ `space-between` にすると、
+ * 卓の幅いっぱいに広がってアバターと名前が離れ、誰の席か読み取りにくくなる。
+ */
+.seat--top .seat__head {
+  width: 100%;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/*
+ * 対面と自分の河は卓の幅いっぱいに広げず、河らしい塊にまとめる。
+ * 横一列に伸ばすと「何枚出たか」がひと目で掴めなくなる。
+ */
+.seat--top .river__list,
+.table__mine .river__list {
+  max-width: 28rem;
+  margin-inline: auto;
+  justify-content: center;
+}
+
+/* 自分の河は手札のすぐ上に置く。 */
+.table__mine .river {
+  margin-bottom: 0.5rem;
+}
+
+/*
+ * 左右の席は伏せ札を外側の縁に縦積みし、その内側に河を置く。
+ * 見出し行だけは幅いっぱいに渡すのでグリッドで組む。
+ */
+.seat--left,
+.seat--right {
+  display: grid;
+  align-content: start;
+  grid-template-areas:
+    'head  head'
+    'backs river';
+}
+
+.seat--left {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.seat--right {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head  head'
+    'river backs';
+}
+
+.seat--left .seat__head,
+.seat--right .seat__head {
+  grid-area: head;
+}
+
+.seat--left .card-backs,
+.seat--right .card-backs {
+  grid-area: backs;
+}
+
+.seat--left .river,
+.seat--right .river {
+  grid-area: river;
+}
+
+/* 卓中央（山・ボーナス・登場グループ）の見た目は `center.css` に分離した（9-3）。 */
+
+/* --- 河 --- */
+
+/*
+ * 河は見出しを持たない。4つ並ぶと文字が卓を埋めるうえ、
+ * 誰の河かは卓の上での位置が示す（読み上げ用の名前は `aria-label` にある）。
+ */
+.river {
+  min-width: 0;
+}
+
+/* 件数ラベル。4河ぶん並ぶので小さく控えめにし、「見えていない分」だけを示す。 */
+.river__count {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+/*
+ * 空でも高さを確保する。1枚目が出た瞬間に高さが立ち上がると卓がガタつく。
+ * 小さいカードの高さ（3.4rem）に合わせる。
+ */
+.river__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.15rem;
+  min-height: 3.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* --- スマートフォン幅（縦向き） --- */
+
+/* orientation を明示して横向き（landscape.css）と排他にする。両方効くと配置が矛盾する。 */
+@media (max-width: 30rem) and (orientation: portrait) {
+  .table {
+    padding: 0.5rem 0.5rem 1.5rem;
+  }
+
+  /* 1列に積む。左右に置ける幅がないので、順に並べて位置ではなく名前で区別する。 */
+  .table__board {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'top'
+      'left'
+      'right'
+      'center'
+      'bottom';
+  }
+
+  /*
+   * 1列になったら左右の席も上下に積まれるので、伏せ札の縦積みは高さを食うだけになる。
+   * 向きは props（席の位置）が決めるが、これはレイアウトの都合なので CSS 側で戻す。
+   * `.seat` を挟んで詳細度を上げ、App.css の定義より確実に後勝ちさせる。
+   */
+  .seat--left,
+  .seat--right {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .seat .card-backs--vertical {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .seat .card-backs--vertical .card--back {
+    width: 1.5rem;
+    height: 2.2rem;
+  }
+
+  .seat {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.4rem;
+  }
+}

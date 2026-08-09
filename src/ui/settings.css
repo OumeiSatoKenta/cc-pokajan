@@ -1,0 +1,314 @@
+/* ロスター設定・ルール設定の各画面。 */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1rem 0.75rem 3rem;
+}
+
+.settings__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.settings__title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* --- 検証結果 --- */
+
+.settings__ok,
+.settings__message {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.05);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.settings__validation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings__errors,
+.settings__warnings {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.5rem 1.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.settings__errors {
+  border: 1px solid #ff8a8a;
+  color: #ff8a8a;
+}
+
+.settings__warnings {
+  border: 1px solid #e8c56a;
+  color: #e8c56a;
+}
+
+/* --- 入力 --- */
+
+.settings__input {
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: rgb(255 255 255 / 0.04);
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.settings__input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.settings__number {
+  width: 7rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings__group {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--panel);
+}
+
+.settings__group-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.settings__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.settings__label {
+  font-size: 0.8rem;
+}
+
+.settings__note {
+  margin-left: 0.35rem;
+  font-size: 0.68rem;
+  color: #e8c56a;
+}
+
+/* --- 操作 --- */
+
+.settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.button--small {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+}
+
+/* ファイル選択はボタンの見た目に寄せる（既定の input は場所を取る）。 */
+.settings__file {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.settings__file input {
+  display: none;
+}
+
+.settings__hidden-file {
+  display: none;
+}
+
+/* --- ロスター --- */
+
+.roster__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roster__group {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--panel);
+}
+
+.roster__group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.roster__group-name {
+  flex: 1 1 auto;
+  font-weight: 700;
+}
+
+.roster__count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.roster__orphan-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #e8c56a;
+}
+
+.roster__members {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.roster__member {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.roster__member .settings__input {
+  flex: 1 1 6rem;
+}
+
+.roster__select {
+  flex: 0 1 8rem;
+}
+
+/* 画像が未設定なら頭文字を出す。設定済みなら縮小して並べる。 */
+.roster__thumb {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border);
+  background: rgb(255 255 255 / 0.06);
+  font-size: 0.8rem;
+  overflow: hidden;
+}
+
+.roster__thumb-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* --- プレイヤー設定（座席アバター） --- */
+
+.avatars__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.avatars__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * `roster__thumb` と同じ見た目にするが、クラスは借りない。
+ * 借りると片方の調整がもう片方を動かす。
+ */
+.avatars__thumb {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgb(255 255 255 / 0.06);
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.avatars__thumb-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatars__name {
+  flex: 1 1 auto;
+  font-weight: 700;
+}
+
+@media (max-width: 30rem) {
+  .settings {
+    padding: 0.5rem 0.5rem 2rem;
+  }
+
+  /* 375px では1行に収まらないので、名前と操作を段組みにする。 */
+  .roster__member {
+    flex-wrap: wrap;
+  }
+
+  .roster__member .settings__input {
+    flex: 1 1 8rem;
+  }
+
+  .roster__select {
+    flex: 1 1 6rem;
+  }
+
+  .settings__field {
+    flex-wrap: wrap;
+  }
+
+  .settings__number {
+    width: 6rem;
+  }
+}
+
+/* カードの角に出す記号。1〜2文字なので幅を詰める。 */
+.roster__symbol {
+  flex: 0 0 auto;
+  width: 3rem;
+  text-align: center;
+}

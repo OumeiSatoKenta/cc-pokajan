@@ -1,0 +1,270 @@
+/*
+ * 残り枚数の手がかり（手札ホバーのツールチップと待ち一覧）。
+ *
+ * 卓の配置は `board.css`、自分の手番まわりは `table.css`、和了演出は `win.css`。
+ * ここを分けているのは `table.css` をこれ以上太らせないため（Step 3 の教訓）。
+ */
+
+/* カードの色。`App.css` のグラデーションの濃い側に合わせてある。 */
+.card-counts,
+.wait {
+  --hint-pink: #f7a8c4;
+  --hint-blue: #a3c6f5;
+  --hint-orange: #f7bd85;
+}
+
+/* --- 手札ホバーのツールチップ --- */
+
+/*
+ * ツールチップの基準。**カードではなく手札全体を基準にする。**
+ * カード単位に置くと、375px では端の札の中央から左へはみ出す。
+ */
+.hand-area {
+  position: relative;
+}
+
+.card-counts {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.4rem);
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  /* ツールチップ自身がホバーを奪うと、その下の札から離れた扱いになってちらつく。 */
+  pointer-events: none;
+}
+
+.card-counts__name {
+  font-weight: 700;
+}
+
+.card-counts__list {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-counts__item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  color: #22222b;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-counts__item--pink {
+  background: var(--hint-pink);
+}
+
+.card-counts__item--blue {
+  background: var(--hint-blue);
+}
+
+.card-counts__item--orange {
+  background: var(--hint-orange);
+}
+
+.card-counts__value {
+  font-weight: 700;
+}
+
+.card-counts__note {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+/* --- 待ち（トリガ＋フロー外オーバーレイ） --- */
+
+/*
+ * トリガの入れ物。**オーバーレイの絶対配置の基準**なので relative。
+ * ヘッダー行に inline で収まり、フローを占有するのはトリガだけ。
+ * 一覧はフロー外（絶対配置）に開くので、テンパイの成立/崩れで手札は動かない。
+ */
+.wait {
+  position: relative;
+  display: inline-flex;
+}
+
+/* 「待ち N件」トリガ。金枠チップ。ホバー/クリックで下の一覧を開く。 */
+.wait__trigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--gold-soft);
+  border-radius: 999px;
+  background: var(--slot);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wait__trigger:hover,
+.wait__trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+/*
+ * 一覧はフロー外（絶対配置）。トリガ直下に下方向へ開き、河・手札の上に重なる。
+ * 既定は `display: none`。**`visibility: hidden` にしない**——絶対配置でも
+ * レイアウトには残り、幅が広いと横スクロール域（横向き E2E の `hOverflow`）を広げるため。
+ * `.wait:hover` の覗き見と `data-open` のピン留めのときだけ描く。
+ * z-index は残枚数ツールチップ（`.card-counts` = 5）より前面。
+ */
+.wait__overlay {
+  display: none;
+  position: absolute;
+  /*
+   * トリガの真下に隙間なく開く。`+ Npx` の余白を空けるとその区間が `.wait` の
+   * 当たり判定から外れ、ポインタを下ろす途中で `:hover` の覗き見が切れる（WCAG 1.4.13）。
+   */
+  top: 100%;
+  /*
+   * **右端そろえで内側（左）へ開く。** トリガはヘッダーの `space-between` で右へ寄るため、
+   * `left: 0` だと右方向へ伸びて卓・画面の外にはみ出す。
+   */
+  right: 0;
+  left: auto;
+  z-index: 6;
+  /*
+   * **`min-width: max-content` を置かない。** 中の `.wait__list` は `flex-wrap: wrap` で
+   * 折り返す前提だが、`max-content` は「折り返さない場合の幅」で算出され、
+   * 6件並ぶと 1500px 超になる。`min-width` は `max-width` に勝つ規則があるため
+   * `max-width` が無効化され、横スクロールが崩壊する（待ち2件でも発生）。
+   * 幅は内容に合わせて縮め、上限だけ与える（狭幅では viewport でクランプ）。
+   */
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--sym-bg);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.4);
+}
+
+.wait:hover .wait__overlay,
+.wait__overlay[data-open='true'] {
+  display: block;
+}
+
+.wait__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 各待ちは色ドット＋金枠の丸チップ。並びと残0の淡色化は WaitPanel が決める（ここは見た目だけ）。 */
+.wait__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--gold-soft);
+  border-radius: 999px;
+  background: var(--slot);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+ * **残0 は淡く落とす。** 役はできるが、その札はもう場に無い。
+ * 色だけで伝えないよう、数（`data-unseen`）と「残0」の文字も併記している。
+ */
+.wait__row--dead {
+  opacity: 0.42;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.wait__card {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wait__card::before {
+  content: '';
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+  border-radius: 0.15rem;
+  vertical-align: baseline;
+}
+
+.wait__card--pink::before {
+  background: var(--hint-pink);
+}
+
+.wait__card--blue::before {
+  background: var(--hint-blue);
+}
+
+.wait__card--orange::before {
+  background: var(--hint-orange);
+}
+
+.wait__color {
+  color: var(--muted);
+}
+
+.wait__remaining {
+  font-weight: 700;
+}
+
+.wait__same {
+  margin-left: 0.25rem;
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--accent);
+  /* 金地（--accent）に白は約2.25:1で読めない。accent 地の他要素と同じ濃色にそろえる。 */
+  color: #1b1b22;
+  font-size: 0.68rem;
+}
+
+.wait__score {
+  min-width: 3rem;
+  text-align: right;
+  font-weight: 700;
+}
+
+.wait__more {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 30rem) and (orientation: portrait) {
+  .card-counts {
+    gap: 0.35rem;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.72rem;
+  }
+
+  /* 幅が足りないので出どころの断り書きは落とす。数と色だけ残す。 */
+  .card-counts__note {
+    display: none;
+  }
+
+  /* 役名は残枚数より優先度が低い。狭い幅ではチップから落とす。 */
+  .wait__yaku {
+    display: none;
+  }
+}
