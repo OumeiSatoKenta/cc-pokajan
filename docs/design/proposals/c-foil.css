@@ -1,0 +1,214 @@
+/*
+ * 案C「紙と箔」— 提案用のテーマ。**アプリからは import していない。**
+ *
+ * 上質な紙に活版で刷った札と、箔押しの見出し。**ライトを主にする**のがこの案の要点で、
+ * 明るい画面のゲームは記憶に残りやすく、身内で見せ合う遊びとも相性がよい。
+ * 見出しは明朝、差し色は朱。大物手のときだけ金の箔が出る。
+ */
+
+:root {
+  /* 夜間版：墨色の紙 */
+  --bg: #14120f;
+  --panel: #1e1b16;
+  --border: #383129;
+  --text: #f1eade;
+  --muted: #9d9384;
+  --accent: #e0664a;
+
+  --paper: #1e1b16;
+  --ink: #f1eade;
+  --vermilion: #e0664a;
+  --foil-1: #f6e3a8;
+  --foil-2: #c9992f;
+  --grain: rgb(255 255 255 / 0.022);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ece5d9;
+    --panel: #fbf8f2;
+    --border: #d5cbb9;
+    --text: #2a2622;
+    --muted: #7b7264;
+    --accent: #a8321f;
+
+    --paper: #fbf8f2;
+    --ink: #2a2622;
+    --vermilion: #a8321f;
+    --foil-1: #d9b45a;
+    --foil-2: #9a7318;
+    --grain: rgb(60 45 20 / 0.03);
+  }
+}
+
+/* --- 紙の地。細かい斑と、四隅に落ちる影 --- */
+
+body {
+  background:
+    radial-gradient(circle at 18% 12%, var(--grain) 0 1px, transparent 1px) 0 0 / 7px 7px,
+    radial-gradient(circle at 62% 48%, var(--grain) 0 1px, transparent 1px) 3px 4px / 11px 11px,
+    radial-gradient(ellipse 90% 70% at 50% 40%, transparent 55%, rgb(0 0 0 / 0.1)),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+.app__title {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: var(--vermilion);
+}
+
+/* --- パネル：紙を1枚置いた凹凸 --- */
+
+.seat,
+.board,
+.table__mine,
+.casino__panel,
+.settings,
+.wait {
+  border-color: var(--border);
+  border-radius: 0.25rem;
+  background: var(--paper);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.5),
+    0 1px 2px rgb(0 0 0 / 0.1),
+    0 8px 20px rgb(0 0 0 / 0.08);
+}
+
+.seat--turn {
+  border-color: var(--vermilion);
+  box-shadow:
+    inset 0 0 0 1px rgb(168 50 31 / 0.18),
+    0 6px 16px rgb(0 0 0 / 0.12);
+}
+
+/* 見出しは明朝で、活版のように少し沈ませる */
+.casino__title,
+.overlay__title,
+.settings__title,
+.wait__title,
+.table__mine-title {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+.casino__wallet,
+.seat__score,
+.win-rank__score,
+.wait__score,
+.result__net {
+  font-variant-numeric: tabular-nums;
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+}
+
+/* --- カード：刷り物。インクの濃淡と紙の白 --- */
+
+.card {
+  border-radius: 0.2rem;
+  border-color: rgb(0 0 0 / 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.6),
+    inset 0 -1.6rem 1.2rem -1.2rem rgb(0 0 0 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.18);
+}
+
+.card--pink {
+  background: linear-gradient(170deg, #fbeef0 0%, #f2c3ce 100%);
+}
+
+.card--blue {
+  background: linear-gradient(170deg, #eaf1f7 0%, #bcd3e6 100%);
+}
+
+.card--orange {
+  background: linear-gradient(170deg, #fbf0df 0%, #f0d0a3 100%);
+}
+
+.card__name {
+  background: rgb(255 255 255 / 0.55);
+}
+
+.card--back {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgb(168 50 31 / 0.12) 0 2px,
+      transparent 2px 5px
+    ),
+    linear-gradient(170deg, #efe7d8, #ddd0ba);
+  border-color: rgb(120 90 50 / 0.35);
+}
+
+/* --- ボタン：箔押し --- */
+
+.button {
+  border-radius: 0.2rem;
+  letter-spacing: 0.1em;
+}
+
+.button--primary {
+  border-color: var(--foil-2);
+  background: linear-gradient(100deg, var(--foil-2), var(--foil-1) 45%, var(--foil-2));
+  color: #2b1f06;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5);
+}
+
+/* --- 和了：紙に箔を押す --- */
+
+.win-overlay {
+  background: rgb(24 20 14 / 0.62);
+}
+
+.overlay__panel {
+  border-radius: 0.3rem;
+  border-color: var(--border);
+  background: var(--paper);
+  box-shadow: 0 30px 70px rgb(0 0 0 / 0.4);
+}
+
+.win-cutin__avatar {
+  border-radius: 0.3rem;
+  border-color: var(--border);
+}
+
+.win-cutin .overlay__title {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  letter-spacing: 0.24em;
+}
+
+/* 大物手：金の箔が乗る */
+.win-cutin--big::before {
+  background:
+    linear-gradient(
+      104deg,
+      transparent 34%,
+      rgb(246 227 168 / 0.5) 46%,
+      rgb(255 255 255 / 0.6) 50%,
+      rgb(201 153 47 / 0.45) 56%,
+      transparent 68%
+    ),
+    radial-gradient(circle at 50% 40%, rgb(246 227 168 / 0.22), transparent 70%);
+}
+
+.win-cutin--big .win-cutin__avatar {
+  border-color: var(--foil-2);
+  box-shadow:
+    0 0 0 3px rgb(246 227 168 / 0.3),
+    0 6px 20px rgb(0 0 0 / 0.35);
+}
+
+.win-cutin--big .overlay__title {
+  background: linear-gradient(100deg, var(--foil-2), var(--foil-1) 45%, var(--foil-2));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.win-cutin__badge {
+  border-radius: 0.15rem;
+  background: linear-gradient(100deg, var(--foil-2), var(--foil-1) 45%, var(--foil-2));
+  color: #2b1f06;
+  letter-spacing: 0.12em;
+}
