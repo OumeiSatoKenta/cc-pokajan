@@ -1,0 +1,108 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  },
+  "overrides": [
+    {
+      "files": ["src/engine/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "message": "エンジン層は React に依存してはいけません（純粋 TS を保つこと）"
+              },
+              {
+                "name": "react-dom",
+                "message": "エンジン層は React に依存してはいけません（純粋 TS を保つこと）"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react/*", "react-dom/*"],
+                "message": "エンジン層は React に依存してはいけません（純粋 TS を保つこと）"
+              },
+              {
+                "group": ["**/ui/**"],
+                "message": "エンジン層は UI 層に依存してはいけません"
+              },
+              {
+                "group": ["**/config/*", "**/config/**"],
+                "message": "エンジン層は config 層に依存してはいけません。ルール値は RulesConfig として引数で受け取ること"
+              },
+              {
+                "group": ["**/storage/*", "**/storage/**"],
+                "message": "エンジン層は永続化層に依存してはいけません（純粋関数を保つこと）"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/storage/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "message": "永続化層は React に依存してはいけません"
+              },
+              {
+                "name": "react-dom",
+                "message": "永続化層は React に依存してはいけません"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react/*", "react-dom/*"],
+                "message": "永続化層は React に依存してはいけません"
+              },
+              {
+                "group": ["**/ui/**"],
+                "message": "永続化層は UI 層に依存してはいけません"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/config/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "message": "設定層は React に依存してはいけません（純粋 TS を保つこと）"
+              },
+              {
+                "name": "react-dom",
+                "message": "設定層は React に依存してはいけません（純粋 TS を保つこと）"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react/*", "react-dom/*"],
+                "message": "設定層は React に依存してはいけません（純粋 TS を保つこと）"
+              },
+              {
+                "group": ["**/ui/**"],
+                "message": "設定層は UI 層に依存してはいけません"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

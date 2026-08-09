@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+
+# 日本語のドキュメントは表組みの整形差分が大きいため対象外にする
+docs
+.steering
+
+# Playwright の生成物
+test-results
+playwright-report
