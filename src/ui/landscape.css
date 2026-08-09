@@ -1,0 +1,296 @@
+/*
+ * 横持ちスマホ（例 844×390）向けのレイアウト。
+ *
+ * 縦積み（`board.css`/`center.css` の `max-width: 30rem` かつ portrait）とは別物で、
+ * ここは「横向きで 3×3 の卓が**高さ 390px に収まる**」ことを狙う。要素を全面的に縮める。
+ * import は**最後**（他ファイルの定義に後勝ちさせる）。
+ *
+ * トリガは orientation（viewport の縦横比）で発火するため emulate 不要
+ * （viewport を横長にすれば E2E でも効く）。高さに収まることは E2E で
+ * `scrollHeight <= clientHeight` を実測して担保する（縦あふれの偽陰性を防ぐ）。
+ *
+ * Step 10-3 で **DOM 再構成**により下段を [手札 | 操作] の1レール（`.table__controls`）にし、
+ * app タイトル見出しの回収と合わせて 844×390 の縦 fit を達成した（9-3 の保留を解除）。
+ * 待ちは 10-1 でヘッダー内のトリガ＋フロー外オーバーレイになり、grid セルを持たない。
+ */
+@media (orientation: landscape) and (max-height: 480px) {
+  /*
+   * app のタイトル見出しは、**横向きの対局画面でだけ**視覚的に畳む（卓の外の約51pxを回収。
+   * 縦 fit の主要因の一つ）。対局中は `.table__header` がブランドを視覚的に出すので冗長。
+   *
+   * **`display: none` にはしない**（見出しがアクセシビリティツリーから消え、
+   * 対局画面から heading が0件になる——`.table__title` は `<span>` で見出しではない）。
+   * sr-only（画面外へ退避）で **h1 を支援技術には残したまま**、レイアウト上の高さだけ回収する。
+   * **`.app[data-screen='table']` にスコープする**。無指定だと landscape.css はバンドル全体に効き、
+   * タイトル/BET/精算/設定の見出しまで消える（タイトル画面は他に見出しが無く heading 0 件になる）。
+   */
+  .app[data-screen='table'] .app__header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /*
+   * 縦マージンを 0 にする。`.table` の上マージンが `.app`（min-height:100vh）を突き抜けて
+   * マージン相殺で卓全体を下へずらし、100vh+マージンぶんの縦あふれ（約2px）を生んでいた。
+   */
+  .table {
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0.3rem;
+    gap: 0.2rem;
+  }
+
+  .table__felt {
+    padding: 0.25rem;
+  }
+
+  .table__board {
+    gap: 0.2rem;
+  }
+
+  /* ヘッダーを詰める。 */
+  .table__header {
+    padding: 0 0.3rem 0.15rem;
+  }
+
+  .table__title {
+    font-size: 0.85rem;
+  }
+
+  /* --- 他家の席を小さく（縦に収める最大の要因） --- */
+
+  .seat {
+    gap: 0.12rem;
+    padding: 0.2rem 0.28rem;
+    font-size: 0.62rem;
+  }
+
+  .seat__avatar {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .seat__score {
+    font-size: 0.68rem;
+  }
+
+  /*
+   * 伏せ札を大幅に縮小（第2稿 SIZE.land 相当）。上＝横並び、左右＝縦積み。
+   * **`.seat`/`.river` を挟んで詳細度を上げる**。App.css の同名ルール（`.card--back` 等）と
+   * 同詳細度だと import 順（App.css が後）で負けるため（board.css の縦積みと同じ手）。
+   */
+  .seat .card-backs {
+    gap: 0.08rem;
+  }
+
+  .seat .card--back {
+    width: 0.55rem;
+    height: 0.8rem;
+  }
+
+  .seat .card-backs--vertical .card--back {
+    width: 0.8rem;
+    height: 0.55rem;
+  }
+
+  /* 河の小カードも縮める。 */
+  .river .card--small {
+    width: 1.2rem;
+    height: 1.6rem;
+    font-size: 0.4rem;
+  }
+
+  .river__list {
+    min-height: 1.6rem;
+  }
+
+  .river__count {
+    font-size: 0.52rem;
+  }
+
+  /* --- 中央（山・ボーナス・グループ）を詰める --- */
+
+  .board {
+    gap: 0.25rem 0.5rem;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .board__stat dt {
+    font-size: 0.52rem;
+  }
+
+  .board__stat dd {
+    font-size: 0.72rem;
+  }
+
+  /* ボーナスのカードタイルを縮める（縦を食う）。`.board` を挟み App.css の同詳細度に勝たせる。 */
+  .board .member-tile .card {
+    width: 1.5rem;
+    height: 2.1rem;
+    font-size: 0.4rem;
+  }
+
+  .board .member-tile__label {
+    font-size: 0.5rem;
+  }
+
+  .board__group {
+    padding: 0.2rem 0.35rem;
+    font-size: 0.62rem;
+  }
+
+  .board__members {
+    gap: 0.2rem;
+  }
+
+  /*
+   * グループ進捗を「人数分のドット」にする（所持=金）。
+   * 名前テキストは font-size:0 で視覚的に隠す（DOM には残るので読み上げは効く）。
+   * 所持の金背景（.board__member--held）はそのまま効き、金のドットになる。
+   */
+  .board__member {
+    width: 0.5rem;
+    height: 0.5rem;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+    overflow: hidden;
+  }
+
+  /* --- 手札を小さく。8枚が横1列に収まるように --- */
+
+  .hand {
+    padding-top: 0.35rem;
+    gap: 0.15rem;
+  }
+
+  .hand > li {
+    max-width: 2.7rem;
+  }
+
+  .hand .card {
+    height: 2.9rem;
+    font-size: 0.5rem;
+    padding: 0.15rem 0.15rem 0.5rem;
+  }
+
+  /*
+   * 下段レール: [手札ブロック | 操作バー] の横並び（第2稿の操作エリアは手札の右）。
+   * 操作バーを felt 内・手札の右へ入れることで、縦積み（手札→操作）ぶんの高さを削る
+   * ＝縦 fit の主要因の一つ。縦（portrait）は board.css の flex column のまま。
+   */
+  .table__controls {
+    flex-direction: row;
+    /*
+     * **stretch にしない。** 操作バーの方が背が高くなると（宣言候補が3〜4個並ぶ局面）
+     * stretch は手札ブロックまで同じ高さへ引き伸ばし、レール行＝操作バーの高さになって
+     * 縦があふれる。flex-start にして行の高さは手札ブロックが決め、操作バーは上限＋
+     * スクロールで行の高さを超えないようにする（下記 `.actions`）。
+     */
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .table__controls .table__mine {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /*
+   * 操作バーは幅固定・高さ上限つき。ボタンが増えて上限を超えたらバー内を縦スクロールさせ、
+   * レール行（＝手札ブロックの高さ）を押し広げない。上限は手札ブロックの高さ（約110px）以下に
+   * 置き、行の高さを手札側に決めさせる。ボタンは価値の高い順に並ぶ（`actionBarItems`）ので、
+   * スクロールが要る局面でも上位の候補は先頭に見える。
+   */
+  .table__controls .actions {
+    flex: 0 0 auto;
+    width: 9.5rem;
+    min-height: 0;
+    max-height: 6.5rem;
+    overflow-y: auto;
+    justify-content: flex-start;
+  }
+
+  /*
+   * 手札ブロックの内側を「河（左）｜手札（右）」の2カラムに。右列に手札。
+   * **grid item は `.hand-area`**（`.hand` はその子なので grid-area は効かない）。
+   * 待ちは 10-1 でヘッダー内のトリガ＋フロー外オーバーレイになったため grid セルを持たない。
+   */
+  .table__mine {
+    display: grid;
+    grid-template-columns: minmax(0, 10rem) 1fr;
+    grid-template-areas:
+      'head head'
+      'river hand';
+    align-items: end;
+    gap: 0.15rem 0.4rem;
+  }
+
+  .table__mine-head {
+    grid-area: head;
+    font-size: 0.68rem;
+  }
+
+  .table__mine .river {
+    grid-area: river;
+    margin-bottom: 0;
+  }
+
+  .table__mine .hand-area {
+    grid-area: hand;
+    min-width: 0;
+  }
+
+  /*
+   * 待ちオーバーレイのチップは横1列のスクロールにする。多段に折り返すと
+   * オーバーレイが縦に伸び、横向きの限られた高さでははみ出す（6 件で 200px 超）。
+   */
+  .wait__list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0.2rem;
+  }
+
+  .wait__card {
+    max-width: 5rem;
+  }
+
+  .wait__score {
+    min-width: 0;
+  }
+
+  /* 待ちの役名列は落として4項目（色ドット・名前・残数・点数）に。 */
+  .wait__yaku {
+    display: none;
+  }
+
+  /* 操作バーを詰める。 */
+  .actions,
+  .actions--idle {
+    min-height: 1.4rem;
+    gap: 0.2rem;
+  }
+
+  .timer {
+    gap: 0.3rem;
+  }
+
+  /*
+   * 複合クラス `.button.button--*` で詳細度 (0,2,0) にする。単一クラスだと、
+   * 後からバンドルされる App.css の `.button` ベース (0,1,0) に import 順で負け、
+   * compact の padding/font-size が効かない（9-3 から primary/ghost で潜在していた不具合）。
+   */
+  .button.button--primary,
+  .button.button--tsumo,
+  .button.button--ron,
+  .button.button--ghost {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.72rem;
+  }
+}

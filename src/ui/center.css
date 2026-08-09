@@ -1,0 +1,151 @@
+/*
+ * 卓の中央（山札・ボーナス・登場グループの情報集約）。
+ *
+ * 卓の骨格・席・河は `board.css`、手番まわりは `table.css`。
+ * ここを分けたのは board.css の肥大を止めるため（9-3 での分割。Step 3 の教訓）。
+ * **配置（`.board { grid-area: center }`）は board.css 側**にある。ここは見た目だけを持つ。
+ */
+
+.board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--slot);
+}
+
+.board__stats {
+  display: flex;
+  gap: 1rem;
+  margin: 0;
+}
+
+.board__stat dt {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.board__stat dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.board__bonus {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.board__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * グループは「名前 + 達成数」の行と「構成メンバー」の行を持つブロックにする。
+ * 誰を集めればグループ役が完成するかを読み取れるようにするため、
+ * 構成メンバーを名前で列挙するのが必須要件（丸いチップ1個には収まらない）。
+ */
+.board__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.board__group--done {
+  border-color: var(--accent);
+}
+
+.board__group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.board__group-name {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.board__group--done .board__group-name {
+  color: var(--accent);
+}
+
+.board__group-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.board__group--done .board__group-count {
+  color: var(--accent);
+}
+
+.board__members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 未所持は控えめに、所持済みは塗って区別する。 */
+.board__member {
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.board__member--held {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #1b1b22;
+  font-weight: 700;
+}
+
+.board__member-bonus {
+  margin-left: 0.15rem;
+  color: #ffd34d;
+}
+
+.board__member--held .board__member-bonus {
+  color: #8a6d00;
+}
+
+/* --- スマートフォン幅（縦向き） --- */
+
+/* orientation を明示して横向き（landscape.css）と排他にする。 */
+@media (max-width: 30rem) and (orientation: portrait) {
+  .board__stats {
+    gap: 0.75rem;
+  }
+
+  /* グループ一覧は縦に積む。横並びだと 375px でメンバー名が潰れる。 */
+  .board__groups {
+    width: 100%;
+  }
+
+  .board__group {
+    flex: 1 1 100%;
+  }
+
+  .board__member {
+    font-size: 0.64rem;
+  }
+}

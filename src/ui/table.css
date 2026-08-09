@@ -1,0 +1,395 @@
+/*
+ * 自分の手番まわり（手札・操作バー・演出）のスタイル。
+ * 卓の配置と他家の席は `board.css` にある。カードの見た目は `App.css` から引き継ぐ。
+ */
+
+/* --- ヘッダー（木縁の上） --- */
+
+.table__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.2rem 0.4rem 0.5rem;
+}
+
+.table__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.table__title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.table__subtitle {
+  font-size: 0.6rem;
+  letter-spacing: 0.24em;
+  color: var(--muted);
+}
+
+.table__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.streak,
+.bet {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--slot);
+  font-size: 0.72rem;
+}
+
+.streak__label,
+.bet__label {
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.streak__pips {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.streak__pip {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.streak__pip--lit {
+  background: var(--accent);
+}
+
+.streak__count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.bet__amount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* --- 自分の手札 --- */
+
+.table__mine {
+  padding: 0.6rem 0.75rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--slot);
+}
+
+.table__mine-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  align-items: baseline;
+  /*
+   * 待ちトリガ（テンパイ時だけ出る金枠チップ）はタイトルよりわずかに背が高い。
+   * `min-height` でヘッダー行の高さを固定し、トリガの出入りで下の河・手札が
+   * 動かないことを保証する（オーバーレイが絶対配置なのと合わせて二重の保証）。
+   */
+  min-height: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.table__mine-title {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.table__hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.hand {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  /* 待ち札の持ち上げ（.card--waiting の translateY(-12px)）が器からはみ出さないよう上に余白を確保する。 */
+  padding: 0.9rem 0 0;
+  list-style: none;
+}
+
+/*
+ * 8枚が必ず1行に収まるようにする（折り返すと手札の把握が難しくなる）。
+ * 幅をビューポート単位で決め打ちすると端末幅ごとに溢れるため、
+ * flex で等分し、上限だけを決める。カード自体は枠いっぱいに広がる。
+ */
+.hand > li {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 4.25rem;
+}
+
+/*
+ * 引いた1枚は整列した手札から離す。混ぜてしまうと「今引いた1枚」を見失い、
+ * ツモ切りするかどうかの判断ができなくなる。
+ */
+.hand__drawn {
+  margin-left: 0.6rem;
+}
+
+.hand .card {
+  width: 100%;
+  overflow: hidden;
+}
+
+.card--clickable {
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.card--clickable:hover {
+  transform: translateY(-6px);
+}
+
+.card:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* --- 操作バー --- */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 3.2rem;
+  /* ボタン群とタイマーを1つの操作エリアとしてまとめる軽い枠（第2稿 --actionBg/--actionBd）。 */
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--action-border);
+  border-radius: 0.75rem;
+  background: var(--action-bg);
+}
+
+.actions--idle {
+  min-height: 3.2rem;
+}
+
+.actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/*
+ * 対局中の操作ボタンを種類で色分けする（第2稿 `buildAction()`）。
+ * ツモ（自摸宣言）=緑 / ロン（割り込み）=赤。金の `.button--primary` と見送りの
+ * `.button--ghost` は app 共通なので App.css にある。
+ * **いずれも濃色文字**（緑/赤の濃色端でも `#1b1b22` は AA を満たす）。
+ *
+ * **`.button.button--*` と複合クラスで書き、詳細度を (0,2,0) に上げる。**
+ * この table.css は App.css より**前**にバンドルされる（`App.tsx` が `./App.css` を
+ * import リストの最後に置くため）。単一クラスの `.button--tsumo` (0,1,0) では、後から来る
+ * `.button` ベース (0,1,0) に **import 順で負けて背景・文字色・太字が丸ごと消える**
+ * （影だけ残る「幽霊ボタン」になる）。複合クラスなら import 順に依存せず確実に勝つ
+ * （9-1 の `.card--clickable.card--waiting` と同じ手）。
+ */
+.button.button--tsumo {
+  border-color: transparent;
+  background: linear-gradient(180deg, #a8e6c2, #5cb185);
+  color: #1b1b22;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.35);
+}
+
+.button.button--ron {
+  border-color: transparent;
+  background: linear-gradient(180deg, #ffb3ab, #e0685f);
+  color: #1b1b22;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.35);
+}
+
+/* hover も複合クラスで (0,3,0) にし、`.button:hover{color:var(--accent)}` (0,2,0) に勝たせる。
+   これを怠ると hover で金文字＝緑/赤地に金で不可読（9-1 の轍）になる。 */
+.button.button--tsumo:hover,
+.button.button--ron:hover {
+  color: #1b1b22;
+  opacity: 0.9;
+}
+
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.timer__label {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer__track {
+  flex: 1 1 auto;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+/*
+ * タイマーの色をボタンの色分けと揃える。宣言（ツモ）=緑・割り込み（ロン）=赤。
+ * 打牌は既定の金のまま（`.timer__fill` の既定色）で、切迫した2種と区別する。
+ */
+.timer[data-timer-kind='declare'] .timer__fill {
+  background: #5cb185;
+}
+
+.timer[data-timer-kind='claim'] .timer__fill {
+  background: #e0685f;
+}
+
+.timer__fill {
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  animation-name: timer-shrink;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.timer__fill--static {
+  width: 100%;
+  animation: none;
+}
+
+@keyframes timer-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* --- 終局 --- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.6);
+  z-index: 20;
+  padding: 1rem;
+}
+
+.overlay__panel {
+  width: min(24rem, 100%);
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--panel);
+  text-align: center;
+}
+
+.overlay__title {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+}
+
+.overlay__reason {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.overlay__ranking {
+  margin: 0 0 1.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.overlay__rank {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.overlay__rank--top {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.overlay__rank-score {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- スマートフォン幅 --- */
+
+@media (max-width: 30rem) and (orientation: portrait) {
+  .card {
+    height: 4.4rem;
+    font-size: 0.58rem;
+    padding: 0.2rem 0.2rem 0.7rem;
+  }
+
+  /* 小さいカードでは記号も詰める。名前を圧迫しない大きさに保つ。 */
+  .card__corner {
+    font-size: 0.5rem;
+  }
+
+  .card__corner--tl {
+    top: 0.1rem;
+    left: 0.1rem;
+  }
+
+  .card__corner--br {
+    right: 0.1rem;
+    bottom: 0.1rem;
+  }
+
+  .card__bonus {
+    font-size: 0.45rem;
+  }
+
+  .hand {
+    gap: 0.2rem;
+  }
+
+  .hand__drawn {
+    margin-left: 0.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card--clickable {
+    transition: none;
+  }
+
+  .card--clickable:hover {
+    transform: none;
+  }
+
+  .timer__fill {
+    animation: none;
+    width: 100%;
+  }
+}

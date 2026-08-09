@@ -1,0 +1,244 @@
+/*
+ * 案B「ネオン・カジノ」— 提案用のテーマ。**アプリからは import していない。**
+ *
+ * 深夜のゲームセンターの筐体。藍から紫へ沈む闇に、シアンとマゼンタの管が灯る。
+ * 床は透視グリッド。数字は電光掲示板のように等幅で光る。
+ * 見出しはゴシックを太く、字間を大きく開けて看板にする（外部フォントは使わない）。
+ */
+
+:root {
+  --bg: #08051a;
+  --panel: #150e30;
+  --border: #33206e;
+  --text: #ece6ff;
+  --muted: #9689c8;
+  --accent: #ff3ea5;
+
+  --neon-cyan: #34f5ff;
+  --neon-magenta: #ff3ea5;
+  --neon-violet: #8b5cf6;
+  --grid: rgb(90 60 200 / 0.5);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* 昼の筐体。白い樹脂に、彩度だけ落とさないインク。 */
+    --bg: #f1edfd;
+    --panel: #ffffff;
+    --border: #d6cbf5;
+    --text: #170e33;
+    --muted: #6a5f96;
+    --accent: #d1006e;
+
+    --neon-cyan: #0091a8;
+    --neon-magenta: #d1006e;
+    --neon-violet: #6d3ff0;
+    --grid: rgb(140 110 240 / 0.22);
+  }
+}
+
+/* --- 透視グリッドの床 --- */
+
+body {
+  background:
+    radial-gradient(ellipse 80% 45% at 50% 0%, rgb(139 92 246 / 0.28), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 85% 100%, rgb(255 62 165 / 0.16), transparent 70%),
+    linear-gradient(transparent 0, transparent calc(100% - 1px), var(--grid) 100%) 0 0 / 100% 2.6rem,
+    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), var(--grid) 100%) 0 0 /
+      2.6rem 100%,
+    var(--bg);
+  background-attachment: fixed;
+}
+
+.app__title {
+  font-weight: 800;
+  letter-spacing: 0.42em;
+  color: var(--neon-cyan);
+  text-shadow:
+    0 0 6px rgb(52 245 255 / 0.7),
+    0 0 22px rgb(52 245 255 / 0.35);
+}
+
+/* --- パネル：暗い樹脂に管が1本走る --- */
+
+.seat,
+.board,
+.table__mine,
+.casino__panel,
+.settings,
+.wait {
+  position: relative;
+  border-color: rgb(139 92 246 / 0.4);
+  background: linear-gradient(180deg, rgb(139 92 246 / 0.1), transparent 55%), var(--panel);
+  box-shadow:
+    inset 0 0 24px rgb(90 40 180 / 0.18),
+    0 8px 26px rgb(4 0 20 / 0.5);
+}
+
+.casino__panel::before,
+.table__mine::before {
+  content: '';
+  position: absolute;
+  inset: auto 1.2rem 0 1.2rem;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan), var(--neon-magenta), transparent);
+  opacity: 0.85;
+}
+
+.seat--turn {
+  border-color: var(--neon-cyan);
+  box-shadow:
+    0 0 0 1px rgb(52 245 255 / 0.5),
+    0 0 26px rgb(52 245 255 / 0.3),
+    inset 0 0 24px rgb(52 245 255 / 0.1);
+}
+
+.casino__title,
+.overlay__title,
+.settings__title,
+.wait__title {
+  letter-spacing: 0.22em;
+  font-weight: 800;
+}
+
+/* 数字は電光掲示板 */
+.casino__wallet,
+.seat__score,
+.win-rank__score,
+.wait__score,
+.result__net {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 12px rgb(52 245 255 / 0.35);
+}
+
+/* --- カード：白い面に色の管を巻く --- */
+
+.card {
+  border-color: rgb(255 255 255 / 0.5);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.35),
+    0 0 14px rgb(0 0 0 / 0.45);
+}
+
+.card--pink {
+  background: linear-gradient(160deg, #ffe3f2 0%, #ff9ed2 60%, #ff5cb4 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.6),
+    0 0 16px rgb(255 92 180 / 0.45);
+}
+
+.card--blue {
+  background: linear-gradient(160deg, #dcf7ff 0%, #86ddf3 60%, #35c6ee 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.6),
+    0 0 16px rgb(53 198 238 / 0.45);
+}
+
+.card--orange {
+  background: linear-gradient(160deg, #fff0d4 0%, #ffc46b 60%, #ff9a2e 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.6),
+    0 0 16px rgb(255 154 46 / 0.45);
+}
+
+.card--back {
+  background:
+    repeating-linear-gradient(135deg, rgb(52 245 255 / 0.14) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, #241452, #120a2c);
+  border-color: rgb(139 92 246 / 0.5);
+}
+
+/* --- ボタン：発光する管 --- */
+
+.button {
+  letter-spacing: 0.12em;
+}
+
+.button--primary {
+  border-color: var(--neon-magenta);
+  background: linear-gradient(180deg, #ff6cbc, var(--neon-magenta));
+  color: #16021a;
+  box-shadow:
+    0 0 0 1px rgb(255 62 165 / 0.4),
+    0 0 22px rgb(255 62 165 / 0.45);
+}
+
+.button--ghost {
+  border-color: rgb(52 245 255 / 0.55);
+  color: var(--neon-cyan);
+}
+
+/* --- 和了：斜めに走る帯 --- */
+
+.win-overlay {
+  background:
+    linear-gradient(
+      112deg,
+      transparent 30%,
+      rgb(255 62 165 / 0.16) 45%,
+      rgb(52 245 255 / 0.16) 55%,
+      transparent 70%
+    ),
+    rgb(4 2 14 / 0.82);
+}
+
+.overlay__panel {
+  border-color: rgb(139 92 246 / 0.6);
+  background: linear-gradient(180deg, rgb(139 92 246 / 0.16), transparent 50%), var(--panel);
+  box-shadow:
+    0 0 0 1px rgb(52 245 255 / 0.25),
+    0 24px 70px rgb(0 0 0 / 0.7);
+}
+
+.win-cutin__avatar {
+  border-color: var(--neon-cyan);
+  box-shadow:
+    0 0 0 3px rgb(52 245 255 / 0.18),
+    0 0 30px rgb(52 245 255 / 0.4);
+}
+
+.win-cutin .overlay__title {
+  letter-spacing: 0.3em;
+  text-shadow: 0 0 14px rgb(52 245 255 / 0.5);
+}
+
+/* 大物手：管が一斉に灯る */
+.win-cutin--big::before {
+  background:
+    conic-gradient(
+      from 0deg at 50% 40%,
+      transparent 0deg,
+      rgb(255 62 165 / 0.3) 25deg,
+      transparent 50deg,
+      rgb(52 245 255 / 0.3) 75deg,
+      transparent 100deg,
+      rgb(255 62 165 / 0.3) 125deg,
+      transparent 150deg,
+      rgb(52 245 255 / 0.3) 175deg,
+      transparent 200deg
+    ),
+    radial-gradient(circle at 50% 38%, rgb(255 62 165 / 0.3), transparent 70%);
+}
+
+.win-cutin--big .win-cutin__avatar {
+  border-color: var(--neon-magenta);
+  box-shadow:
+    0 0 0 4px rgb(255 62 165 / 0.28),
+    0 0 50px rgb(255 62 165 / 0.6);
+}
+
+.win-cutin--big .overlay__title {
+  color: #fff;
+  text-shadow:
+    0 0 10px rgb(255 62 165 / 0.9),
+    0 0 30px rgb(52 245 255 / 0.6);
+}
+
+.win-cutin__badge {
+  background: linear-gradient(90deg, var(--neon-magenta), var(--neon-violet));
+  color: #fff;
+  letter-spacing: 0.16em;
+  box-shadow: 0 0 18px rgb(255 62 165 / 0.5);
+}

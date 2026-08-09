@@ -1,0 +1,25 @@
+{
+  "name": "cc-pokajan",
+  "runArgs": ["--name", "cc-pokajan"],
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "workspaceFolder": "/workspaces/cc-pokajan",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "containerEnv": {
+    "PULSE_SERVER": "tcp:host.docker.internal:4713",
+    "AUDIODRIVER": "pulseaudio"
+  },
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite dev server",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/install-tools.sh && if [ -f package.json ]; then npm install; fi"
+}

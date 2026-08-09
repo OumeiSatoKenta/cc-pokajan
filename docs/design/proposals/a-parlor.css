@@ -1,0 +1,188 @@
+/*
+ * 案A「深夜の雀荘」— 提案用のテーマ。**アプリからは import していない。**
+ *
+ * 一点の灯りに照らされた深夜の卓。羅紗（ラシャ）の緑、飴色の真鍮、
+ * 沈んだ木。暗さが主で、光は上から1つだけ落ちる。
+ * 見出しは明朝にして、昭和の雀荘の看板の字面を借りる（外部フォントは使わない）。
+ */
+
+:root {
+  --bg: #0c1210;
+  --panel: #17201b;
+  --border: #2c3a30;
+  --text: #ece5d5;
+  --muted: #8f9c8c;
+  --accent: #d9a441;
+
+  --felt: #143a2c;
+  --felt-edge: #0a221a;
+  --brass: #d9a441;
+  --brass-dim: #8a6a2a;
+  --lamp: rgb(255 226 160 / 0.16);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* 昼の卓。畳と生成りの紙。 */
+    --bg: #e7e0cf;
+    --panel: #f7f3e8;
+    --border: #cbc1a9;
+    --text: #23261f;
+    --muted: #6d6a58;
+    --accent: #96651a;
+
+    --felt: #3f6b52;
+    --felt-edge: #2c4d3a;
+    --brass: #96651a;
+    --brass-dim: #b79a5c;
+    --lamp: rgb(255 244 214 / 0.55);
+  }
+}
+
+/* --- 卓の面と灯り --- */
+
+body {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 8%, var(--lamp), transparent 70%),
+    repeating-linear-gradient(
+      92deg,
+      rgb(255 255 255 / 0.012) 0 2px,
+      transparent 2px 4px
+    ),
+    linear-gradient(180deg, var(--felt-edge), var(--felt) 30%, var(--felt-edge));
+  background-attachment: fixed;
+}
+
+.app__title {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  color: var(--brass);
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
+}
+
+/* --- パネル：沈んだ木に真鍮の細線 --- */
+
+.seat,
+.board,
+.table__mine,
+.casino__panel,
+.settings,
+.wait {
+  border-color: rgb(217 164 65 / 0.22);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 40%),
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 10px 24px rgb(0 0 0 / 0.35);
+}
+
+.seat--turn {
+  border-color: var(--brass);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 0 0 1px rgb(217 164 65 / 0.35),
+    0 0 20px rgb(217 164 65 / 0.18);
+}
+
+.casino__title,
+.overlay__title,
+.settings__title {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  letter-spacing: 0.12em;
+}
+
+/* --- カード：古い牌のような象牙色の下地 --- */
+
+.card {
+  border-color: rgb(0 0 0 / 0.4);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 2px 4px rgb(0 0 0 / 0.35);
+}
+
+.card--pink {
+  background: linear-gradient(165deg, #f6dfe2 0%, #e0a9b3 55%, #cf94a0 100%);
+}
+
+.card--blue {
+  background: linear-gradient(165deg, #dae7ef 0%, #a8c2d4 55%, #93b0c5 100%);
+}
+
+.card--orange {
+  background: linear-gradient(165deg, #f6e6cf 0%, #ddb887 55%, #cfa871 100%);
+}
+
+.card__name {
+  background: rgb(253 250 243 / 0.8);
+}
+
+.card--back {
+  background:
+    repeating-linear-gradient(45deg, rgb(0 0 0 / 0.16) 0 3px, transparent 3px 6px),
+    linear-gradient(160deg, #1f3b30, #10241d);
+  border-color: rgb(217 164 65 / 0.25);
+}
+
+/* --- ボタン：真鍮のプレート --- */
+
+.button {
+  letter-spacing: 0.06em;
+}
+
+.button--primary {
+  border-color: var(--brass);
+  background: linear-gradient(180deg, #e8bf63, var(--brass) 55%, var(--brass-dim));
+  color: #221a08;
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.35);
+}
+
+/* --- 和了：上から灯りが差す --- */
+
+.win-overlay {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgb(255 220 150 / 0.22), transparent 65%),
+    rgb(6 10 8 / 0.78);
+}
+
+.overlay__panel {
+  border-color: rgb(217 164 65 / 0.3);
+  background:
+    linear-gradient(180deg, rgb(255 245 220 / 0.06), transparent 45%),
+    var(--panel);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.6);
+}
+
+.win-cutin__avatar {
+  border-color: var(--brass-dim);
+  box-shadow: 0 0 0 6px rgb(217 164 65 / 0.1);
+}
+
+.win-cutin__kind,
+.win-cutin .overlay__title {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  letter-spacing: 0.16em;
+}
+
+/* 大物手：真鍮の板が焼けるように光る */
+.win-cutin--big::before {
+  background: radial-gradient(circle at 50% 38%, rgb(255 205 110 / 0.4), transparent 70%);
+}
+
+.win-cutin--big .win-cutin__avatar {
+  border-color: #ffd77a;
+  box-shadow:
+    0 0 0 3px rgb(255 215 122 / 0.35),
+    0 0 40px rgb(255 200 90 / 0.55);
+}
+
+.win-cutin--big .overlay__title {
+  color: #ffd77a;
+  text-shadow: 0 0 18px rgb(255 190 80 / 0.5);
+}
+
+.win-cutin__badge {
+  background: linear-gradient(180deg, #ffd77a, #c8912c);
+  color: #241a05;
+}
