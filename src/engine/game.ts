@@ -27,7 +27,6 @@ import { yakuContextOf } from './gameSelectors'
 import { createRng } from './rng'
 import { advanceTurn, exitChain, finishGame } from './turnFlow'
 import { applyDeclare, applyWin } from './win'
-import { findYaku } from './yaku'
 import type { Action, GameEvent, GameState, Player, PlayerId, Roster, RulesConfig } from './types'
 
 export { IllegalActionError } from './errors'
@@ -279,8 +278,9 @@ export function reduce(state: GameState, action: Action, rules: RulesConfig): Re
 
       // ロンの再計算は「受理の瞬間」に行う。優先度解決は手札を持たない純関数なので、
       // その時点では再計算できない。`claims` に入るのは常に再計算済みの候補になる。
+      // 列挙候補との一致ではなく、選んだカード（手札 + 捨て札）から役を再導出して検証する。
       const probed = [...draft.players[action.playerId].hand, discard]
-      const candidate = verifyCandidate(findYaku(probed, ctx, discard), action.candidate, 'CLAIM')
+      const candidate = verifyCandidate(probed, action.candidate, ctx, 'CLAIM', discard)
 
       draft.claims[action.playerId] = candidate
       closeClaimWindowIfSettled(draft, events, rules)

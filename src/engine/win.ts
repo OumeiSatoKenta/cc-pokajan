@@ -12,7 +12,6 @@ import { IllegalActionError } from './errors'
 import { requireDiscarder, takeFromWall, type Draft } from './gameDraft'
 import { settleRon, settleTsumo, toPaidEvents } from './settle'
 import { checkGameOverAfterWin, exitChain } from './turnFlow'
-import { findYaku } from './yaku'
 import type { GameEvent, PlayerId, RulesConfig, WinKind, YakuCandidate, YakuContext } from './types'
 
 /** 点数を移動させる。ロンは放銃者が全額、ツモは他の全員が等分を支払う。 */
@@ -134,7 +133,8 @@ export function applyDeclare(
   }
 
   const hand = draft.players[playerId].hand
-  const candidate = verifyCandidate(findYaku(hand, ctx), claimed, 'DECLARE')
+  // 列挙候補との一致ではなく、宣言された候補が選んだカードから役を再導出して検証する。
+  const candidate = verifyCandidate(hand, claimed, ctx, 'DECLARE')
 
   applyWin(draft, events, playerId, candidate, 'tsumo', rules)
 }

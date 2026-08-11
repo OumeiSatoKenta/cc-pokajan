@@ -67,15 +67,17 @@ export function groupYakuKind(size: number): YakuKind {
  * `color` が `null` なら混色（通常役）、色が入っていれば同色役。
  * `targetId` は 3カードならメンバーID、N人組ならグループIDで、
  * ロン判定のシグネチャに使う。
+ *
+ * 選択からの再導出（`yakuSelection.ts`）も同じ中間表現を作るため公開している。
  */
-interface CandidateDraft {
+export interface CandidateDraft {
   readonly kind: YakuKind
   readonly targetId: MemberId | GroupId
   readonly color: ColorId | null
   readonly cards: readonly Card[]
 }
 
-function signatureOf(draft: CandidateDraft): string {
+export function signatureOf(draft: CandidateDraft): string {
   return `${draft.kind}:${draft.targetId}:${draft.color ?? 'mixed'}`
 }
 
@@ -187,7 +189,7 @@ function enumerateDrafts(hand: readonly Card[], ctx: YakuContext): CandidateDraf
   return [...enumerateTriples(hand, ctx), ...enumerateGroups(hand, ctx)]
 }
 
-function toCandidate(draft: CandidateDraft, ctx: YakuContext): YakuCandidate {
+export function toCandidate(draft: CandidateDraft, ctx: YakuContext): YakuCandidate {
   const bonusCount = countBonusCards(draft.cards, ctx.bonusMemberIds)
 
   // 「どちらの列挙ループから来たか」ではなく、実際に消費するカードの色から判定する。
@@ -232,6 +234,22 @@ function removeFirstByUid(hand: readonly Card[], uid: number): Card[] {
 }
 
 /**
+ * `hand` から `uid` の1枚を除いたときに成立する役のシグネチャ集合。
+ *
+ * ロンの「その捨て札がなくても手の内で成立する役では割り込めない」規則を、
+ * 列挙（`findYaku`）と選択の再導出（`yakuSelection.ts` の `candidateFromSelection`）の
+ * **両方が同じ式で共有する**ための単一の算出点。片方だけ直して drift するのを防ぐ。
+ */
+export function achievableSignaturesWithout(
+  hand: readonly Card[],
+  uid: number,
+  ctx: YakuContext,
+): Set<string> {
+  const withoutRequired = removeFirstByUid(hand, uid)
+  return new Set(enumerateDrafts(withoutRequired, ctx).map(signatureOf))
+}
+
+/**
  * 成立している役の候補をすべて列挙する。
  *
  * `hand` は**判定対象のカード全体**であり、ロン判定では「自分の手札 + 相手の捨て札」を渡す。
@@ -260,8 +278,7 @@ export function findYaku(
     )
   }
 
-  const withoutRequired = removeFirstByUid(hand, required.uid)
-  const achievableWithout = new Set(enumerateDrafts(withoutRequired, ctx).map(signatureOf))
+  const achievableWithout = achievableSignaturesWithout(hand, required.uid, ctx)
 
   const ronDrafts = drafts.filter(
     (draft) =>
