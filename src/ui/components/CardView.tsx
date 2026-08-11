@@ -14,6 +14,11 @@ export interface CardViewProps {
   /** あと1枚で役が完成する組に寄与しているか（原作のリーチ表示にあたる黄色枠）。 */
   readonly isWaiting?: boolean
   /**
+   * 役の構成として選ばれているか（絵札の組み替え）。選択リング＋持ち上げで示す。
+   * **面の色は塗り替えない**（面の色＝同色役の判定情報。`isWaiting` と同じ扱い）。
+   */
+  readonly isSelected?: boolean
+  /**
    * 河の直前の1枚（ロン対象）か。白熱色の枠＋グローで示す。
    * 手札の待ち札（`isWaiting`）と違い持ち上げはしない（河の小カードのため）。
    */
@@ -30,6 +35,11 @@ export interface CardViewProps {
   readonly testId?: string
   readonly onClick?: (uid: number) => void
   readonly disabled?: boolean
+  /**
+   * タップが何をするか。aria-label の動詞を出し分ける（「捨てる」/「選ぶ」）。
+   * 見た目や onClick の中身は呼び出し側が決め、ここは読み上げ文言だけを切り替える。
+   */
+  readonly actionKind?: 'discard' | 'select'
   /**
    * このカードを説明している要素の ID（`aria-describedby`）。
    *
@@ -52,11 +62,13 @@ export function CardView({
   groupSymbol,
   isBonus = false,
   isWaiting = false,
+  isSelected = false,
   isLast = false,
   size = 'normal',
   testId = 'card',
   onClick,
   disabled = false,
+  actionKind = 'discard',
   describedById,
 }: CardViewProps) {
   // 読み込みに失敗した URL を覚えておき、再試行で無限にちらつかせない。
@@ -69,6 +81,9 @@ export function CardView({
   }
   if (isWaiting) {
     classes.push('card--waiting')
+  }
+  if (isSelected) {
+    classes.push('card--selected')
   }
   if (isLast) {
     classes.push('card--last')
@@ -135,7 +150,9 @@ export function CardView({
       data-testid={testId}
       data-uid={card.uid}
       aria-describedby={describedById}
-      aria-label={`${memberName}（${COLOR_LABELS[card.color]}）を捨てる`}
+      // 選択モードのカードはトグルボタン。選択状態を支援技術へ伝える（捨てるモードでは付けない）。
+      aria-pressed={actionKind === 'select' ? isSelected : undefined}
+      aria-label={`${memberName}（${COLOR_LABELS[card.color]}）を${actionKind === 'select' ? '選ぶ' : '捨てる'}`}
     >
       {content}
     </button>

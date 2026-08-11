@@ -61,6 +61,7 @@ cc-pokajan/
 | `deck.ts`           | ロスター検証・グループ選出・山札構築・配牌             |
 | `score.ts`          | 役種 × 同色 × ボーナス枚数 → 点数                      |
 | `yaku.ts`           | 役候補の列挙・ロン判定・最良候補選択・待ち計算         |
+| `yakuSelection.ts`  | 選択されたカードからの役の再導出（宣言・割り込み検証） |
 | `settle.ts`         | ツモ1/3分配・ロン全額・0クランプ                       |
 | `gameDraft.ts`      | リデューサ内部の可変表現と不変条件ガード               |
 | `gameSelectors.ts`  | 状態からの導出（クエリ）                               |
@@ -89,16 +90,22 @@ cc-pokajan/
 
 ```
 game.ts
-  ├─→ win.ts ─→ turnFlow.ts ─┐
-  ├─→ claims.ts ─────────────┤
-  ├─→ gameSelectors.ts       ├─→ gameDraft.ts ─→ errors.ts
-  ├─→ deck.ts ─→ rng.ts      │
-  └─→ yaku.ts ─→ score.ts    │
-                              └─→ types.ts（全モジュールが参照）
+  ├─→ win.ts ─→ turnFlow.ts ─────────┐
+  ├─→ claims.ts ─→ yakuSelection.ts ─┤
+  ├─→ gameSelectors.ts               ├─→ gameDraft.ts ─→ errors.ts
+  ├─→ deck.ts ─→ rng.ts              │
+  └─→ yaku.ts ─→ score.ts            │
+       ↑ yakuSelection.ts ──┘        │
+                                      └─→ types.ts（全モジュールが参照）
 
 ai.ts ─→ gameSelectors.ts, yaku.ts, score.ts   ← game.ts に依存しない
 autoplay.ts ─→ game.ts, ai.ts
 ```
+
+`yakuSelection.ts`（選択からの再導出）は `yaku.ts` の共有プリミティブ
+（`toCandidate` / `signatureOf` / `achievableSignaturesWithout` / `CandidateDraft`）を使うため
+`yaku.ts` に依存する一方向のみ。`claims.ts` の `verifyCandidate` は `yakuSelection.ts` を経由して
+宣言／割り込みを検証する。
 
 `ai.ts` が `game.ts`（状態機械本体）に依存しないのは意図的である。
 AI は「状態を進めない、状態から値を引くだけ」の立場であり、

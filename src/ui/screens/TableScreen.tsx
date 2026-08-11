@@ -15,6 +15,7 @@ import type { AvatarMap } from '../avatars'
 import { useAssetUrls } from '../hooks/useAssetUrls'
 import { useAvatarUrls } from '../hooks/useAvatarUrls'
 import { useGameLoop } from '../hooks/useGameLoop'
+import { useSelection } from '../hooks/useSelection'
 import { winKey } from '../hooks/loopReducer'
 import { sortHand } from '../handOrder'
 import { groupSymbolsByMember, seatName, seatOrientation } from '../labels'
@@ -23,6 +24,7 @@ import { NO_WIN_TIMING, WIN_TIMING } from '../../config/presentation'
 import '../board.css'
 import '../center.css'
 import '../table.css'
+import '../selection.css'
 import '../win.css'
 import '../hints.css'
 // 横向きの上書きは最後に読み込み、他の定義に後勝ちさせる。
@@ -126,6 +128,13 @@ export function TableScreen({
   )
 
   /*
+   * 絵札の組み替え（選択からのツモ／ロン）の配線。状態・`composed` 導出・局面変化での
+   * リセット・確定・おまかせプレフィルは `useSelection` に集約してある（ツモ／ロン共通）。
+   * ここは Hand と ActionBar へ結線するだけ。
+   */
+  const selection = useSelection(loop, rules)
+
+  /*
    * 順位はエンジンが `GameOver` で確定させた値を使う。
    *
    * 以前はここで点数から並べ直していたが、エンジンも同じ方針
@@ -154,12 +163,27 @@ export function TableScreen({
     }
   }
 
+  /*
+   * 和了演出中は盤面を凍結する。**手札タップ（`useSelection`）・操作バーのボタン（`ActionBar`）・
+   * 案内文（`hintFor`）を同じ判定で止める**。演出中も `game.state` は連続宣言で次の局面へ進みうるため、
+   * `pendingWin` を見ずに `phase` だけで affordance や文言を出すと「押せると言うのに押せない」矛盾になる。
+   * 1回だけ評価して各所へ配り、判定元がずれる余地を無くす。
+   */
+  const isPaused = pendingWin !== null
+
   return (
     <main
       className="table"
       data-testid="table-screen"
       data-phase={state.phase}
       data-pending-claims={loop.pendingCpuClaims}
+      /*
+       * 選択枚数を観測用に出す（`data-phase` / `data-pending-claims` と同じ E2E 観測フック）。
+       * 局面をまたいだ選択リセット（`WaitPanel` pinned と同型の一時状態バグ）を、消費済み uid が
+       * 手札から消える偶然に頼らず直接検査するために使う。**ロンは捨て札を含まないため役の
+       * 構成枚数より 1 小さい**（`useSelection` の `selectedCount` 参照）。
+       */
+      data-selected-count={selection.selectedCount}
     >
       <TableHeader chainCount={state.chainCount} maxChain={rules.maxChainDeclare} bet={bet} />
 
@@ -228,6 +252,7 @@ export function TableScreen({
                     declarable: loop.declarable,
                     claimable: loop.claimable,
                     canDiscard: loop.canDiscard,
+                    isPaused,
                   })}
                 </span>
 
@@ -266,11 +291,19 @@ export function TableScreen({
                 waitingUids={loop.waits.contributingUids}
                 unseen={loop.unseen}
                 drawnUid={loop.drawnUid}
-                canDiscard={loop.canDiscard}
+                interaction={selection.interaction}
+                selectedUids={selection.selectedSet}
                 onDiscard={loop.discard}
+                onSelect={selection.onSelect}
               />
             </section>
 
+            {/*
+              操作バーは唯一の操作の置き場（横向き 844×390 では高さ上限＋スクロールで保護される）。
+              絵札の組み替えのライブプレビュー＋確定（緑ツモ／赤ロン）も**この中**に置く（`.table__mine` の
+              grid を増やさず、既存の高さ保護に相乗りするため）。`selection` は選択できる局面（自分の
+              宣言番＝ツモ／割り込める役を持つ受付＝ロン）のときだけ `useSelection` が非 null を返す。
+            */}
             <ActionBar
               phase={state.phase}
               declarable={loop.declarable}
@@ -278,9 +311,11 @@ export function TableScreen({
               timerKind={loop.timerKind}
               timeLimitMs={loop.timeLimitMs}
               timerKey={loop.timerKey}
-              onDeclare={loop.declare}
-              onClaim={loop.claim}
+              selection={selection.selection}
+              onPrefill={selection.onPrefill}
               onPass={loop.pass}
+              /* 和了演出中はボタンを凍結する（手札タップ・案内文と同じ `isPaused` 判定）。 */
+              isPaused={isPaused}
             />
           </div>
         </div>

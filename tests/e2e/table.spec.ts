@@ -7,6 +7,8 @@ import {
   discardTimer,
   playToEnd,
   playUntilClaimWindow,
+  playUntilHumanClaim,
+  playUntilHumanDeclare,
   screen,
   startGame,
   url,
@@ -502,4 +504,290 @@ test('横向きでも対局画面以外（タイトル）の見出しは畳ま�
   // 通常の見出し高さ（約51px）。閾値を 30 に置き、スコープだけ崩れて sr-only の 1px 化は残る
   // 中間状態（App.css の padding だけ後勝ちして高さ 16〜24px）も拾えるようにする。
   expect(headerHeight).toBeGreaterThan(30)
+})
+
+/**
+ * 絵札の組み替え（Step 2）— 自分の宣言番でカードをタップして役を構成する。
+ *
+ * 到達性は配牌依存のため、宣言機会が来なければ skip する（`winGate` と同じ流儀）。
+ */
+test('selfDeclare でカードをタップすると選択リングが付き、もう一度で外れる', async ({ page }) => {
+  // 和了は伴わないので fast=1（演出待ちを消す）で軽く回す。宣言の持ち時間は既定（20秒）。
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanDeclare(page)
+  test.skip(!reached, 'このシードでは人間の宣言機会が発生しなかった')
+
+  // 宣言番ではライブプレビューが出ている（操作バー内）。
+  await expect(page.getByTestId('selection-preview')).toBeVisible()
+
+  const selected = page.locator('.card--selected')
+  await expect(selected).toHaveCount(0)
+
+  // 手札の1枚をタップ＝役の構成として選ぶ（捨てるのではない）。
+  const first = page.getByTestId('card').first()
+  await first.click()
+  await expect(selected).toHaveCount(1)
+  await expect(first).toHaveAttribute('aria-pressed', 'true')
+
+  // もう一度タップで選択が外れる（トグル）。
+  await first.click()
+  await expect(selected).toHaveCount(0)
+})
+
+test('局面が変わると選択がリセットされる（宣言を見送ると選択が空に戻る）', async ({ page }) => {
+  // `data-selected-count` を直接見るので、消費済み uid が手札から消える偶然に頼らない。
+  // リセット効果（`[phase,turn,declarer,chainCount]`）を外すと最後の assert が落ちる。
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanDeclare(page)
+  test.skip(!reached, 'このシードでは人間の宣言機会が発生しなかった')
+
+  const table = screen(page)
+  await page.getByTestId('card').first().click()
+  await expect(table).toHaveAttribute('data-selected-count', '1')
+
+  // 見送る（SKIP_DECLARE）で selfDeclare → discard へ遷移。選択は空に戻るはず。
+  await page.getByTestId('pass-button').click()
+  await expect(table).toHaveAttribute('data-selected-count', '0')
+})
+
+test('おまかせ候補ごとにライブプレビューの点数が切り替わる（色の取り方で点数が変わる）', async ({
+  page,
+}) => {
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanDeclare(page)
+  test.skip(!reached, 'このシードでは人間の宣言機会が発生しなかった')
+
+  // おまかせ候補は findYaku の列挙（混色/同色は別候補で点数が違う）。各候補をプレフィルすると、
+  // プレビューはその候補の役名＋点数（＝おまかせラベルから「おまかせ 」を除いたもの）を実測で示す。
+  // 候補が複数あればここで「色の取り方で点数が変わる」を画面上で確認できる。
+  const buttons = page.getByTestId('declare-button')
+  const previewText = page.locator('.selection-preview__text')
+  const count = await buttons.count()
+  expect(count).toBeGreaterThan(0)
+
+  for (let i = 0; i < count; i++) {
+    const label = (await buttons.nth(i).textContent()) ?? ''
+    const yaku = label.replace('おまかせ', '').trim()
+
+    await buttons.nth(i).click()
+    await expect(previewText).toHaveAttribute('data-valid', 'true')
+    await expect(previewText).toHaveText(yaku)
+  }
+})
+
+test('おまかせプレフィルから選択を埋め、緑のツモで確定できる', async ({ page }) => {
+  await startGame(page, url(CLAIM_SEED, { fast: false, turnMs: 2_000 }))
+
+  const reached = await playUntilHumanDeclare(page)
+  test.skip(!reached, 'このシードでは人間の宣言機会が発生しなかった')
+
+  // 確定はまだ押せない（何も選んでいない）。
+  await expect(page.getByTestId('declare-confirm')).toBeDisabled()
+
+  // おまかせを押すと構成カードが選択欄へ入り（選択リングが付き）、プレビューが有効になる。
+  await page.getByTestId('declare-button').first().click()
+  await expect(page.locator('.card--selected').first()).toBeVisible()
+  await expect(page.locator('.selection-preview__text')).toHaveAttribute('data-valid', 'true')
+
+  // 有効な役になったので緑のツモで確定でき、和了演出が出る。
+  const confirm = page.getByTestId('declare-confirm')
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+  await expect(page.getByTestId('win-overlay')).toBeVisible({ timeout: 10_000 })
+})
+
+/**
+ * 横向き 844×390 で **SelectionPreview がマウントされた状態**でも縦 fit が保たれる（doc-reviewer [高]）。
+ *
+ * `canSelect` を決定論的に 844×390 で引くのは難しいため、実マウント相当の `.selection-preview`
+ * （文言＋緑のツモ）を操作バー（`.actions`）へ注入して高さを模す。`.actions` は横向きで
+ * `max-height`＋`overflow-y: auto` の保護を持つため、プレビューが増えても行は伸びない。
+ * この保護（`.table__mine` の grid を増やさず `.actions` に相乗りする設計）が崩れるとここが落ちる。
+ */
+test('横向き 844×390 で選択プレビューが出ても縦横スクロールが出ない', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 })
+  await startGame(page, url(CLAIM_SEED))
+
+  await expect(page.getByTestId('table-screen')).toBeVisible()
+
+  await page.evaluate(() => {
+    const actions = document.querySelector('.actions')
+    if (actions === null) {
+      throw new Error('.actions が見つかりません')
+    }
+    const preview = document.createElement('div')
+    preview.className = 'selection-preview'
+    preview.setAttribute('data-testid', 'selection-preview')
+    const text = document.createElement('span')
+    text.className = 'selection-preview__text'
+    text.textContent = '3人組（同色） 540点'
+    const confirm = document.createElement('button')
+    confirm.className = 'button button--tsumo'
+    confirm.textContent = 'ツモ'
+    preview.append(text, confirm)
+    // 実際の並び（プレビューが先頭）に合わせて先頭へ入れる。
+    actions.prepend(preview)
+  })
+
+  const { hOverflow, vOverflow } = await page.evaluate(() => {
+    const el = document.documentElement
+    return {
+      hOverflow: el.scrollWidth - el.clientWidth,
+      vOverflow: el.scrollHeight - el.clientHeight,
+    }
+  })
+  expect(hOverflow).toBeLessThanOrEqual(1)
+  expect(vOverflow).toBeLessThanOrEqual(1)
+})
+
+/**
+ * 絵札の組み替え（Step 3）— 割り込み（`claimWindow`）で手札をタップしてロンを構成する。
+ *
+ * ロンでは**捨て札（`lastDiscard`）が構成の固定要素**で、手札選択（`.card--selected`）には入らない。
+ * プレイヤーは手札だけをタップし、確定時に捨て札が合流する。到達性は配牌依存のため、
+ * 人間のロン機会が来なければ skip する（`winGate` と同じ流儀）。
+ */
+test('claimWindow でおまかせロンをプレフィルし、赤のロンで確定できる（捨て札は手札選択に入らない）', async ({
+  page,
+}) => {
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanClaim(page)
+  test.skip(!reached, 'このシードでは人間のロン機会が発生しなかった')
+
+  // ロン受付では選択プレビューが出て、確定は赤のロン（claim-confirm）。まだ何も選んでいないので不活性。
+  await expect(page.getByTestId('selection-preview')).toBeVisible()
+  const confirm = page.getByTestId('claim-confirm')
+  await expect(confirm).toBeVisible()
+  await expect(confirm).toBeDisabled()
+
+  // おまかせを押すと構成カード（**手札分だけ**）が選択欄へ入り、プレビューが有効になる。
+  await page.getByTestId('claim-button').first().click()
+  await expect(page.locator('.card--selected').first()).toBeVisible()
+  await expect(page.locator('.selection-preview__text')).toHaveAttribute('data-valid', 'true')
+
+  /*
+   * 捨て札は固定要素なので手札選択（`.card--selected`）には入らない。
+   * `data-selected-count`（手札の選択数）と `.card--selected` の枚数が一致することで、
+   * 捨て札が手札側に二重計上されていないことを観測する（合流を外すと役が崩れ確定が不活性になる）。
+   */
+  const selectedCount = await page.locator('.card--selected').count()
+  await expect(screen(page)).toHaveAttribute('data-selected-count', String(selectedCount))
+  expect(selectedCount).toBeGreaterThan(0)
+
+  // 有効なロンなので赤のロンで確定でき、和了演出が出る。
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+  await expect(page.getByTestId('win-overlay')).toBeVisible({ timeout: 10_000 })
+})
+
+test('ロンは選択カードをタップで外すと確定が不活性になり、組み直すと活性に戻る', async ({
+  page,
+}) => {
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanClaim(page)
+  test.skip(!reached, 'このシードでは人間のロン機会が発生しなかった')
+
+  await page.getByTestId('claim-button').first().click()
+  const confirm = page.getByTestId('claim-confirm')
+  await expect(confirm).toBeEnabled()
+
+  // 選択中の1枚をタップで外すと役が崩れる → 確定が不活性（タップ駆動の再導出をロンでも確認）。
+  await page.locator('.card--selected').first().click()
+  await expect(confirm).toBeDisabled()
+
+  // おまかせで組み直すと再び有効。
+  await page.getByTestId('claim-button').first().click()
+  await expect(confirm).toBeEnabled()
+})
+
+test('claimWindow で選択しても、見送ると選択がリセットされる', async ({ page }) => {
+  // `selfDeclare` 版のリセットテスト（局面が変わると…）の claimWindow 対。受付が閉じる瞬間に
+  // `resetKeyOf`（phase/turn）が変わって選択が空へ戻ることを直接観測する（依存を壊すと最後の assert が落ちる）。
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanClaim(page)
+  test.skip(!reached, 'このシードでは人間のロン機会が発生しなかった')
+
+  const table = screen(page)
+  // ロン受付で手札を1枚タップ（構成の一部）。捨てるのではなく選ぶ。
+  await page.getByTestId('card').first().click()
+  await expect(table).toHaveAttribute('data-selected-count', '1')
+
+  // 見送る（PASS）で claimWindow を抜けると、選択は空に戻る。
+  await page.getByTestId('pass-button').click()
+  await expect(table).toHaveAttribute('data-selected-count', '0')
+})
+
+test('おまかせロン候補ごとにライブプレビューの点数が切り替わる（色の取り方で点数が変わる）', async ({
+  page,
+}) => {
+  await startGame(page, url(CLAIM_SEED))
+
+  const reached = await playUntilHumanClaim(page)
+  test.skip(!reached, 'このシードでは人間のロン機会が発生しなかった')
+
+  // おまかせ claim 候補は findYaku の列挙（混色/同色は別候補で点数が違う）。各候補をプレフィルすると、
+  // プレビューはその候補の役名＋点数（＝おまかせラベルから「おまかせ 」を除いたもの）を実測で示す。
+  // ロンの composed 分岐（捨て札合流＋required）が UI 結線経由でも点数を正しく再計算することを担保する
+  // （ツモ側の同型テストとの対称。doc-reviewer [高]）。
+  const buttons = page.getByTestId('claim-button')
+  const previewText = page.locator('.selection-preview__text')
+  const count = await buttons.count()
+  expect(count).toBeGreaterThan(0)
+
+  for (let i = 0; i < count; i++) {
+    const label = (await buttons.nth(i).textContent()) ?? ''
+    const yaku = label.replace('おまかせ', '').trim()
+
+    await buttons.nth(i).click()
+    await expect(previewText).toHaveAttribute('data-valid', 'true')
+    await expect(previewText).toHaveText(yaku)
+  }
+})
+
+/**
+ * 横向き 844×390 で **ロンの SelectionPreview がマウントされた状態**でも縦 fit が保たれる。
+ *
+ * ロンの確定（赤 `button--ron`）もツモと同じ `.actions`（横向きで `max-height`＋`overflow-y`）に
+ * 相乗りする。`canClaim` を決定論的に 844×390 で引くのは難しいため、実マウント相当の
+ * `.selection-preview`（文言＋赤のロン）を注入して高さを模す。この高さ保護が崩れるとここが落ちる。
+ */
+test('横向き 844×390 でロンの選択プレビューが出ても縦横スクロールが出ない', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 })
+  await startGame(page, url(CLAIM_SEED))
+
+  await expect(page.getByTestId('table-screen')).toBeVisible()
+
+  await page.evaluate(() => {
+    const actions = document.querySelector('.actions')
+    if (actions === null) {
+      throw new Error('.actions が見つかりません')
+    }
+    const preview = document.createElement('div')
+    preview.className = 'selection-preview'
+    preview.setAttribute('data-testid', 'selection-preview')
+    const text = document.createElement('span')
+    text.className = 'selection-preview__text'
+    text.textContent = '3カード（同色） 480点'
+    const confirm = document.createElement('button')
+    confirm.className = 'button button--ron'
+    confirm.textContent = 'ロン'
+    preview.append(text, confirm)
+    actions.prepend(preview)
+  })
+
+  const { hOverflow, vOverflow } = await page.evaluate(() => {
+    const el = document.documentElement
+    return {
+      hOverflow: el.scrollWidth - el.clientWidth,
+      vOverflow: el.scrollHeight - el.clientHeight,
+    }
+  })
+  expect(hOverflow).toBeLessThanOrEqual(1)
+  expect(vOverflow).toBeLessThanOrEqual(1)
 })

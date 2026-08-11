@@ -253,6 +253,80 @@ export async function playUntilClaimWindow(page: Page, deadlineMs = 60_000): Pro
   return false
 }
 
+/**
+ * **人間が宣言（ツモ）できる局面**まで進める。見つかったら true。
+ *
+ * `declare-button`（おまかせプレフィル）が出るのは `selfDeclare` かつ人間が宣言権者で
+ * 役があるときだけ（`declarableFor` が `declarer===humanSeat` で絞る）。そこでは選択 UI
+ * （`selection-preview` / `declare-confirm`）も同時に出ている。**declare-button を先に見るのが要点**:
+ * その局面では見送るボタンも同時に出るため、先に見送ると宣言機会を通り過ぎる。
+ */
+export async function playUntilHumanDeclare(page: Page, deadlineMs = 90_000): Promise<boolean> {
+  const deadline = Date.now() + deadlineMs
+
+  while (Date.now() < deadline) {
+    if (await page.getByTestId('declare-button').first().isVisible()) {
+      return true
+    }
+    if (await page.getByTestId('result-overlay').isVisible()) {
+      return false
+    }
+    if (await dismissWinIfAny(page)) {
+      continue
+    }
+
+    const phase = await screen(page).getAttribute('data-phase')
+    if (phase === 'discard') {
+      await discardFirst(page).catch(() => undefined)
+    } else if (await page.getByTestId('pass-button').isVisible()) {
+      await pass(page).catch(() => undefined)
+    } else {
+      await page.waitForTimeout(80)
+    }
+  }
+
+  return false
+}
+
+/**
+ * **人間がロン（割り込み）できる局面**まで進める。見つかったら true。
+ *
+ * `claim-button`（おまかせロンのプレフィル）が出るのは `claimWindow` で人間が割り込める役を
+ * 持つときだけ。そこでは選択 UI（`selection-preview` / 赤の `claim-confirm`）も同時に出ている。
+ *
+ * **`playUntilHumanDeclare` とは見送りの振る舞いが逆。** 宣言版は claimWindow でも見送るが、
+ * ロン版で claimWindow を見送るとロン機会を通り過ぎる。**`pass` は `selfDeclare` のときだけ**押す。
+ * 毎周「先に」`claim-button` を見るのは、受付が開いた同じ周回で見送らないため。汎用の
+ * `advanceOneStep`/`playUntil`（`passInClaimWindow: true`）は同じ理由で流用できない。
+ */
+export async function playUntilHumanClaim(page: Page, deadlineMs = 90_000): Promise<boolean> {
+  const deadline = Date.now() + deadlineMs
+
+  while (Date.now() < deadline) {
+    if (await page.getByTestId('claim-button').first().isVisible()) {
+      return true
+    }
+    if (await page.getByTestId('result-overlay').isVisible()) {
+      return false
+    }
+    if (await dismissWinIfAny(page)) {
+      continue
+    }
+
+    const phase = await screen(page).getAttribute('data-phase')
+    if (phase === 'discard') {
+      await discardFirst(page).catch(() => undefined)
+    } else if (phase === 'selfDeclare' && (await page.getByTestId('pass-button').isVisible())) {
+      // 見送るのは自分の宣言番だけ。claimWindow では押さない（ロン機会を通り過ぎない）。
+      await pass(page).catch(() => undefined)
+    } else {
+      await page.waitForTimeout(80)
+    }
+  }
+
+  return false
+}
+
 /** 終局まで進める。捨てる番なら捨て、宣言・割り込みは見送る。 */
 export async function playToEnd(page: Page, deadlineMs = 150_000): Promise<void> {
   const overlay = page.getByTestId('result-overlay')

@@ -22,8 +22,17 @@ export interface HandProps {
   readonly unseen: UnseenCounts
   /** 今引いた1枚。整列した手札から離して見せる。 */
   readonly drawnUid: number | null
-  readonly canDiscard: boolean
+  /**
+   * タップが何をするか。**分岐はここ1箇所に集約する。**
+   * - `discard`: タップで捨てる（自分の捨てる番。現状維持）
+   * - `select`: タップで役の構成を選ぶ（自分の宣言番。絵札の組み替え）
+   * - `none`: 触れない（無効ボタン。残枚数ホバーは `<li>` が受ける）
+   */
+  readonly interaction: 'discard' | 'select' | 'none'
+  /** `select` のとき選ばれている uid。 */
+  readonly selectedUids: ReadonlySet<number>
   readonly onDiscard: (uid: number) => void
+  readonly onSelect: (uid: number) => void
 }
 
 /** 自分の手札。捨てられるのは自分の手番の捨てるフェーズだけ。 */
@@ -36,11 +45,17 @@ export function Hand({
   waitingUids,
   unseen,
   drawnUid,
-  canDiscard,
+  interaction,
+  selectedUids,
   onDiscard,
+  onSelect,
 }: HandProps) {
   const reduced = useReducedMotion()
   const duration = reduced === true ? 0 : 0.22
+
+  // タップの意味と有効/無効を1箇所で決める。以降のカードはこの判断を共有する。
+  const isSelectMode = interaction === 'select'
+  const isCardDisabled = interaction === 'none'
 
   /*
    * ホバー中の札はここで持つ。親に上げると、対局が1手進むたびに
@@ -109,8 +124,10 @@ export function Hand({
                 groupSymbol={groupSymbolById.get(card.memberId)}
                 isBonus={bonusMemberIds.includes(card.memberId)}
                 isWaiting={waitingUids.has(card.uid)}
-                onClick={onDiscard}
-                disabled={!canDiscard}
+                isSelected={isSelectMode && selectedUids.has(card.uid)}
+                onClick={isSelectMode ? onSelect : onDiscard}
+                disabled={isCardDisabled}
+                actionKind={isSelectMode ? 'select' : 'discard'}
                 /*
                  * 焦点を当てた札だけがツールチップを指す。読み上げは
                  * 「今どれを見ているか」に結びついていないと意味がない。

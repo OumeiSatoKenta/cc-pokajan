@@ -146,6 +146,79 @@ describe('CardView — 待ち札の強調（面の色を殺さない）', () => 
   })
 })
 
+describe('CardView — 選択の強調（絵札の組み替え）', () => {
+  const card = hand('a1:pink')[0]
+
+  /**
+   * 選択リング（.card--selected）は待ち札と同じく**面の色を殺さない**。
+   * 面の色は同色役の判定情報で、選択中でも狙える色が読めなければならない。
+   * 強調クラスと面の色クラスが**同時に**付くことを DOM 不変条件として固定する。
+   */
+  it('isSelected で card--selected と面の色クラス（card--pink）が同時に付く', () => {
+    const html = renderToStaticMarkup(<CardView card={card} memberName="アオイ" isSelected />)
+
+    expect(html).toContain('card--selected')
+    expect(html).toContain('card--pink')
+  })
+
+  it('isSelected でなければ選択クラスは付かない', () => {
+    const html = renderToStaticMarkup(<CardView card={card} memberName="アオイ" />)
+
+    expect(html).not.toContain('card--selected')
+  })
+})
+
+describe('CardView — タップの意味に応じた読み上げ', () => {
+  const card = hand('a1:pink')[0]
+
+  it('既定は「捨てる」', () => {
+    const html = renderToStaticMarkup(
+      <CardView card={card} memberName="アオイ" onClick={() => undefined} />,
+    )
+
+    expect(html).toContain('を捨てる')
+    expect(html).not.toContain('を選ぶ')
+  })
+
+  it('actionKind="select" では「選ぶ」', () => {
+    const html = renderToStaticMarkup(
+      <CardView card={card} memberName="アオイ" onClick={() => undefined} actionKind="select" />,
+    )
+
+    expect(html).toContain('を選ぶ')
+    expect(html).not.toContain('を捨てる')
+  })
+
+  /**
+   * 選択モードのカードはトグルボタンなので `aria-pressed` で選択状態を支援技術へ伝える。
+   * 捨てるモードはトグルではないため属性自体を出さない（`aria-pressed="false"` を常設しない）。
+   */
+  it('actionKind="select" では aria-pressed を選択状態に応じて出す', () => {
+    const unselected = renderToStaticMarkup(
+      <CardView card={card} memberName="アオイ" onClick={() => undefined} actionKind="select" />,
+    )
+    expect(unselected).toContain('aria-pressed="false"')
+
+    const selected = renderToStaticMarkup(
+      <CardView
+        card={card}
+        memberName="アオイ"
+        onClick={() => undefined}
+        actionKind="select"
+        isSelected
+      />,
+    )
+    expect(selected).toContain('aria-pressed="true"')
+  })
+
+  it('actionKind="discard"（既定）では aria-pressed を出さない', () => {
+    const html = renderToStaticMarkup(
+      <CardView card={card} memberName="アオイ" onClick={() => undefined} />,
+    )
+    expect(html).not.toContain('aria-pressed')
+  })
+})
+
 describe('DiscardPile', () => {
   const cards = hand('a1:pink a2:blue')
 

@@ -174,4 +174,25 @@ describe('hintFor', () => {
       hintFor({ phase: 'discard', declarable: [], claimable: [candidate()], canDiscard: false }),
     ).toBe('相手の手番です')
   })
+
+  /**
+   * 和了演出中は局面が連続宣言で先に進んでいても操作は凍結されている。促す文言（捨てて/割り込め）を
+   * 出すと「押せると言うのに押せない」矛盾になるため、中立文言に倒す（ボタン・手札の停止と揃える）。
+   */
+  it('演出中（isPaused）は促す局面でも中立の文言にする', () => {
+    // 捨てられる局面でも演出中なら促さない。
+    expect(hintFor({ phase: 'discard', ...none, canDiscard: true, isPaused: true })).toBe(
+      '和了を確認しています',
+    )
+    // 宣言できる局面でも演出中なら促さない。
+    expect(
+      hintFor({
+        phase: 'selfDeclare',
+        declarable: [candidate()],
+        claimable: [],
+        canDiscard: false,
+        isPaused: true,
+      }),
+    ).toBe('和了を確認しています')
+  })
 })

@@ -7,7 +7,8 @@
  */
 
 import { IllegalActionError } from './errors'
-import type { Card, ClaimDecision, PlayerId, YakuCandidate } from './types'
+import { candidateFromSelection } from './yakuSelection'
+import type { Card, ClaimDecision, PlayerId, YakuCandidate, YakuContext } from './types'
 
 /** 割り込み宣言の勝者。 */
 export interface ClaimWinner {
@@ -74,39 +75,39 @@ function isCandidateShape(value: unknown): value is YakuCandidate {
   )
 }
 
-/** 消費カード・役種・同色可否で候補を同定する。点数は含めない（偽装を弾くため）。 */
-function candidateKey(candidate: YakuCandidate): string {
-  const uids = candidate.cards
-    .map((card) => card.uid)
-    .sort((a, b) => a - b)
-    .join(',')
-
-  return `${candidate.kind}:${candidate.sameColor ? 'same' : 'mixed'}:${uids}`
-}
-
 /**
- * 呼び出し側が渡した候補を、エンジンが再計算した候補で置き換える。
+ * 宣言された候補を、選択されたカードから再導出した候補で置き換える。
  *
- * 「検証して通す」のではなく「再計算した方を採用する」のが要点。点数フィールドを
- * 偽装した候補を渡されても、精算に使われるのは必ずエンジンが計算した点数になる。
+ * 「列挙候補との一致を検証する」のではなく「選んだカードから役を再計算して採用する」のが要点。
+ * `findYaku` が正準の1組しか列挙しないのに対し、`candidateFromSelection` はプレイヤーが選んだ
+ * カードそのものから役を組むため、**正準以外の合法選択**（同一メンバー4枚のうち別の3枚など）も
+ * 受理できる。安全性は従来と同値に保たれる:
+ *
+ * - **点数偽装不可**: 精算に使うのは再計算した候補の点数（`claimed.score` は捨てる）。
+ * - **未所持カード不可**: 選択 uid が `hand` に解決できなければ `null`。
+ * - **不要牌ロン不可**: `required` の「反手内成立でロン不可」規則。
+ *
+ * `hand` はロンでは「自分の手札 + 相手の捨て札」、`required` はその捨て札。
  */
 export function verifyCandidate(
-  available: readonly YakuCandidate[],
-  claimed: YakuCandidate,
+  hand: readonly Card[],
+  claimed: unknown,
+  ctx: YakuContext,
   label: string,
+  required?: Card,
 ): YakuCandidate {
   if (!isCandidateShape(claimed)) {
     throw new IllegalActionError(`${label} に渡された候補が役の形をしていません`)
   }
 
-  const key = candidateKey(claimed)
-  const match = available.find((candidate) => candidateKey(candidate) === key)
+  const selectedUids = claimed.cards.map((card) => card.uid)
+  const candidate = candidateFromSelection(hand, selectedUids, ctx, required)
 
-  if (match === undefined) {
+  if (candidate === null) {
     throw new IllegalActionError(
       `${label} で宣言された役は現在の手札では成立しません（${claimed.kind} / ${claimed.cards.length}枚）`,
     )
   }
 
-  return match
+  return candidate
 }

@@ -255,6 +255,67 @@ repository-structure.md / development-guidelines.md / glossary.md）は未作成
 [docs/ideas/pokajan-playtest-followup-add-feature-commands.md](docs/ideas/pokajan-playtest-followup-add-feature-commands.md)。
 **10-3 で 9-3 保留の「横向きの縦 fit（844×390）」を解消した**。
 
+**絵札選択（役の組み替え）の Step 1（エンジン）も完了**。計画は
+[docs/ideas/pokajan-yaku-card-selection-plan.md](docs/ideas/pokajan-yaku-card-selection-plan.md)（全3ステップ・UI は Step 2/3）。
+宣言（ツモ）／割り込み（ロン）の検証を**「`findYaku` 列挙との uid 一致」から「選択カードからの再導出」**へ変更。
+選択から役を再導出する `candidateFromSelection` は新ファイル `src/engine/yakuSelection.ts` に置き、
+`yaku.ts` の共有プリミティブ（`toCandidate` / `signatureOf` / `achievableSignaturesWithout` / `CandidateDraft`）を使う。
+
+> **正準以外の合法選択を受理する**のがこの変更の要点。`findYaku` はカードを決定的に自動選択（`slice(0,3)`・
+> 各メンバー先頭一致）するため正準の uid 組しか通さないが、`candidateFromSelection` は**選んだカードそのもの**から
+> 役種・同色・点数を再計算する。安全性は既存と同値: 点数**と役種**の偽装不可（`cards` の uid 以外は無視・再計算）／
+> 未所持・重複 uid は `null` ／不要牌ロン規則は `findYaku` と**同一関数** `achievableSignaturesWithout` を共有。
+> AI が渡す候補は合法選択なので必ず受理され、**100 局の点数保存則・カード保存則・手札枚数は不変**。
+> 「混色列挙は任意の単色列挙より厳密に緩い」ため、ロンの反手内成立判定が `findYaku` と一致することを
+> **ツモ・ロン両方の差分オラクル（seed 0〜99）**で機械的に担保している（`tests/engine/yaku.test.ts`）。
+
+**絵札選択の Step 2（UI・ツモ）も完了**。`selfDeclare`（人間が宣言権者）で手札タップ→役構成→ライブプレビュー
+→緑のツモで確定（`loop.declare(composed)`）。おまかせ候補は金の `button--primary` で選択欄へプレフィル（即確定しない）。
+`discard` フェーズのタップは従来どおり捨て札。**ロン（`claimWindow`）は Step 3 で追加した（下記）**。
+
+> **タップの二役は `Hand` の `interaction: 'discard' | 'select' | 'none'` 1箇所で分岐**する
+> （`discard`=捨てる / `select`=構成を選ぶ / `none`=無効ボタン。残枚数ホバーの `<li>` 受け口は不変）。
+> 選択は `TableScreen` のローカル state で、`[phase, turn, declarer, chainCount]` でリセットする
+> （`WaitPanel` pinned と同型。`data-selected-count` で観測しミューテーション回帰済み）。
+> **`canSelect` は `pendingWin === null` を含む**（演出中はキーボード経路でも選択させない。7-4 の「効果とクリックの両層」）。
+
+> **選択 UI は `.table__mine` ではなく `ActionBar`（`.actions`）の中に置く**。横向き `landscape.css` の
+> `.table__mine` は grid（`head/river/hand`）で、兄弟挿入すると 844×390 の縦 fit が壊れる。`.actions` は
+> 高さ上限＋スクロールの保護を持つのでそこへ相乗りする（`selection` prop で `SelectionPreview` を内包）。
+> `.card--selected`（面の色を塗り替えないシアンのリング）は `App.css` の `.card--waiting` 後に置き後勝ちさせ、
+> レイアウトは新規 `src/ui/selection.css`（App.css 400 行超回避）。おまかせラベルとプレビュー文言は
+> `describeYaku`（`actionBarItems.ts`）を共有。
+
+**絵札選択の Step 3（UI・ロン）も完了し、絵札選択機能は完成した**。`claimWindow`（人間が割り込める役を持つ）で
+手札タップ→ロン構成→ライブプレビュー→**赤のロン**で確定（`loop.claim(composed)`）。ロン候補もおまかせプレフィル。
+**捨て札（`lastDiscard`）は構成の固定要素**で、`candidateFromSelection([...手札, 捨て札], [...選択, 捨て札.uid], ctx, 捨て札)`
+と確定時に合流させる。選択配線はツモ／ロン共通の **`useSelection`**（`src/ui/hooks/useSelection.ts`）へ抽出し、
+`TableScreen` は結線のみ（393→355 行）。
+
+> **捨て札は手札選択（`selectedUids`）に入れず、`composed` 側で固定合流する。** 選択にも入れると
+> `resolveSelection` が重複 uid を `null` にして常に役にならなくなる。かつ捨て札は `me.hand` に無いので
+> `Hand` はハイライトできない。よって**選択＝手札 uid のみ／捨て札＝固定合流**に統一する。おまかせプレフィルも
+> 捨て札 uid を除外する（`claimableFor` の候補 `cards` は捨て札込みのため）。`data-selected-count` は
+> **ロンでは役の構成枚数より 1 小さい**（`.card--selected` の枚数と一致・捨て札は含まない）。
+
+> **確定ボタンの出し分けは `SelectionPreview` の `kind: WinKind`（`'tsumo' | 'ron'`）1軸に閉じる**
+> （緑「ツモ」`declare-confirm` / 赤「ロン」`claim-confirm`。プレビュー本文・活性条件・aria は共通）。
+> `ActionBar` の declare/claim は**対称**に金のおまかせプレフィルへ揃え、`onClaim` を廃止（確定は
+> `SelectionPreview` に一本化）。型は既存の `WinKind`（`engine/types`）を共有し同義の再定義を作らない。
+
+> **和了演出中は「両層で止める」を手札とボタンの両方に効かせる（7-4 の轍）。** 連続宣言では `applyWin` が
+> **同じ `reduce()` 内で** `game.state` を次の `selfDeclare`/`discard` へ進めるため、`pendingWin` を見ず
+> `phase`/`declarable` だけで affordance を出すと、`.overlay` が奪えない**キーボード経路**で見送り・おまかせ・
+> 捨て・選択が押せてしまう（`loopReducer` の `isPaused` が下層で弾くのでデータは壊れないが、操作可能表示が嘘になる）。
+> ゲート判定を純関数 **`interactionGate`**（`src/ui/selection.ts`・`isPaused` で全操作を落とす）に出し、
+> `actionBarItems` の `isPaused`（ボタンを `[]` に）・`hintFor` の `isPaused`（案内文を中立に）と**同じ 1 つの
+> `isPaused`（`TableScreen` で1回評価）**で閉じる。リセット鍵も純関数 `resetKeyOf` に切り出して単体テスト化した
+> （`autoAction`/`turnTimer` と同型。ゲート/リセットを E2E 頼みにしない）。**この[必須]は secondary レビューが捕えた**。
+
+> **E2E で人間のロン局面へは `playUntilHumanClaim`（`tests/e2e/helpers/table.ts`）で到達する。** `claim-button`
+> を毎周先に見て、`pass` は `selfDeclare` のときだけ押す（`claimWindow` で見送るとロン機会を通り過ぎる。
+> `playUntilHumanDeclare` とは見送りの振る舞いが逆で流用不可）。到達手順は helper に一本化（7-4 の轍）。
+
 | Step | 内容                              | 状態                             |
 | ---- | --------------------------------- | -------------------------------- |
 | 1    | 基盤・型定義・山札生成            | ✅ 完了                          |

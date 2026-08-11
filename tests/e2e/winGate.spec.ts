@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { CLAIM_SEED, dismissWinIfAny, screen, startGame, url } from './helpers/table'
+import { CLAIM_SEED, playUntilHumanDeclare, screen, startGame, url } from './helpers/table'
 
 /**
  * 和了演出（Step 7-4 の停止 + Step 8-1 の2段構成）の E2E。
@@ -48,39 +48,24 @@ async function playUntilWin(page: Page): Promise<boolean> {
  * 人間が和了して初めて「演出中に人間の時計が動いている」状況が作れる。
  */
 async function playUntilHumanWin(page: Page): Promise<boolean> {
-  const deadline = Date.now() + 90_000
-
-  while (Date.now() < deadline) {
-    const declare = page.getByTestId('declare-button')
-    if (await declare.isVisible()) {
-      await declare.click({ timeout: 5_000 }).catch(() => undefined)
-      return page.getByTestId('win-overlay').isVisible()
-    }
-    if (await page.getByTestId('result-overlay').isVisible()) {
-      return false
-    }
-    // CPU の和了はここでは対象外なので、出たら閉じて先へ進める。
-    if (await dismissWinIfAny(page)) {
-      continue
-    }
-
-    if (await page.getByTestId('pass-button').isVisible()) {
-      await page
-        .getByTestId('pass-button')
-        .click({ timeout: 5_000 })
-        .catch(() => undefined)
-    } else if ((await screen(page).getAttribute('data-phase')) === 'discard') {
-      await page
-        .getByTestId('card')
-        .first()
-        .click({ timeout: 5_000 })
-        .catch(() => undefined)
-    } else {
-      await page.waitForTimeout(80)
-    }
+  // 進行の手順は helpers の `playUntilHumanDeclare` に一本化する（Step 7-4 の「写しを2箇所直す」轍を避ける）。
+  if (!(await playUntilHumanDeclare(page))) {
+    return false
   }
 
-  return false
+  // Step 2 で人間のツモは「おまかせでプレフィル → 緑のツモで確定」の2段になった。
+  // declare-button は選択欄に構成カードを入れるだけで、確定は declare-confirm が担う。
+  await page
+    .getByTestId('declare-button')
+    .first()
+    .click({ timeout: 5_000 })
+    .catch(() => undefined)
+  // プレフィル後、composed が有効になり確定ボタンが活性化する（クリックが活性を待つ）。
+  await page
+    .getByTestId('declare-confirm')
+    .click({ timeout: 5_000 })
+    .catch(() => undefined)
+  return page.getByTestId('win-overlay').isVisible()
 }
 
 /**

@@ -1,0 +1,36 @@
+/*
+ * 絵札の組み替え（選択からのツモ）まわりのレイアウト。
+ *
+ * 選択カードの強調（`.card--selected`）と不活性ボタン（`.button:disabled`）は import 順で
+ * `.card--waiting` / `.button` ベースに後勝ちさせる必要があるため App.css に置く。
+ * こちらは他ルールと競合しない純粋なレイアウトなので独立ファイルに分け、App.css を 400 行以内に保つ。
+ */
+
+/*
+ * 選択が作る役のライブプレビュー＋ツモ確定。**操作バー（`.actions`）の中**に置く
+ * （`.actions` は flex-column・gap 付きなので余白は gap に任せ、自前の margin は持たない）。
+ * 横向き 844×390 では `.actions` の幅は約 9.5rem と狭いため `flex-wrap` で文言と確定ボタンを
+ * 縦に畳めるようにする（横あふれ防止）。高さ超過はバー側の overflow-y スクロールが吸収する。
+ */
+.selection-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--slot);
+}
+
+.selection-preview__text {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+/* 未成立（役にならない・未選択）の案内文は控えめに。 */
+.selection-preview__text[data-valid='false'] {
+  color: var(--muted);
+  font-weight: 400;
+}
