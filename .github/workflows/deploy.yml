@@ -1,0 +1,54 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 既定は最小権限（build の checkout 用の contents:read のみ）。
+# デプロイ用の pages:write / id-token:write は deploy ジョブにだけ付ける。
+# build は npm ci / test で第三者コードを走らせるため、公開権限を渡さない
+# （侵害された依存がゲートを迂回して直接デプロイするのを防ぐ）。
+permissions:
+  contents: read
+
+# 進行中のデプロイは止めない（公開の取りこぼしを防ぐ）。同時に走る push はキューする。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # npm test 等のハングで Runner を占有し続けないための上限
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # CLAUDE.md の検証ゲート（E2E 除く）。どれか落ちれば artifact は上がらず deploy されない。
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build # production ＝ base '/cc-pokajan/' で dist/ を生成
+      - run: npm run format:check
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # デプロイ権限はこのジョブだけに絞る（deploy-pages は OIDC の id-token を要する）。
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

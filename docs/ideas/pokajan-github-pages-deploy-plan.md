@@ -107,10 +107,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 既定は最小権限（build の checkout 用 contents:read のみ）。デプロイ権限は deploy ジョブに絞る。
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # 進行中のデプロイは止めない（公開の取りこぼしを防ぐ）
 concurrency:
@@ -120,6 +119,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # ハング時に Runner を占有し続けない上限
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -140,15 +140,25 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # デプロイ権限はこのジョブだけに絞る（build に公開権限を渡さない）
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 ```
 
 - **Node 22**: Vite 8 は Node 20.19+ / 22.12+ を要求。LTS の 22 を固定。`cache: npm` で `npm ci` を高速化。
+- **権限は per-job 最小化**: top-level は `contents: read` のみ。`pages: write` / `id-token: write` は deploy に絞る
+  （build は `npm ci`/`npm test` で第三者コードを走らせるため、公開権限を渡さない＝ゲート迂回デプロイを構造的に防ぐ）。
+  Step 2 の欠陥・構造の両軸レビューが収束して指摘。GitHub 公式雛形は top-level 一括だが、より厳格に倒す。
+- **アクション版**: 公式 `starter-workflows`（`pages/nextjs.yml`）と実機で照合。`deploy-pages` は公式最新の `@v5`
+  に合わせた（v4→v5 は Node ランタイム更新のみ）。他4つ（checkout@v4/setup-node@v4/configure-pages@v5/upload-pages-artifact@v3）は現行テンプレートと一致。
 - **`configure-pages@v5`**: 慣例として置く。base は `vite.config.ts` で明示済みなので、その自動注入には依存しない。
 - **`.nojekyll` は付けない**: Actions アーティファクト方式では Jekyll が動かず、かつ Vite 出力は `assets/`
   （アンダースコア無し）。付けても無害だが不要なので「影響の最小化」で省く。

@@ -82,12 +82,16 @@ Step 2: GitHub Actions で Pages へ自動デプロイ
 
 - 新規: `.github/workflows/deploy.yml`
   - トリガー: `push` to `main` ＋ `workflow_dispatch`（手動）。
-  - `permissions: contents: read / pages: write / id-token: write`、`concurrency: { group: pages, cancel-in-progress: false }`。
-  - `build` ジョブ: `checkout@v4` → `setup-node@v4`（`node-version: 22`, `cache: npm`）→ `npm ci` →
+  - **権限は per-job 最小化**: top-level `permissions: contents: read` のみ。`pages: write` / `id-token: write` は
+    **deploy ジョブにだけ**付ける（build は第三者コードを走らせるため公開権限を渡さない＝ゲート迂回デプロイを防ぐ）。
+    `concurrency: { group: pages, cancel-in-progress: false }`。
+  - `build` ジョブ: `timeout-minutes: 15` / `checkout@v4` → `setup-node@v4`（`node-version: 22`, `cache: npm`）→ `npm ci` →
     **検証ゲート（CLAUDE.md の順）** `npm run lint` → `npm run typecheck` → `npm test` → `npm run build` → `npm run format:check` →
     `configure-pages@v5` → `upload-pages-artifact@v3`（`path: ./dist`）。
-  - `deploy` ジョブ: `needs: build`、`environment: github-pages`、`deploy-pages@v4`。
+  - `deploy` ジョブ: `needs: build`、per-job `permissions`（contents:read/pages:write/id-token:write）、`environment: github-pages`、`deploy-pages@v5`。
   - **`.nojekyll` は付けない**（Actions アーティファクト方式では Jekyll が動かず不要。プラン B 節・リスク表参照）。
+  - **アクション版は公式 starter-workflow と照合**（`deploy-pages` は公式最新の `@v5`）。**workflow injection なし**
+    （`run:` に非信頼入力なし、唯一の `${{ }}` はアクション出力）。
 - 修正: `README.md`
   - 公開 URL（`https://oumeisatokenta.github.io/cc-pokajan/`）を 1 行追記（Live デモへの導線）。
 - 手動手順の案内（コードではない、実行者への申し送り）:
