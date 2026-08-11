@@ -30,5 +30,9 @@ export default defineConfig((env) => ({
     // UI コンポーネントのテストを追加する Step 4 で jsdom への切り替えを検討する。
     environment: 'node',
     include: ['tests/**/*.test.{ts,tsx}'],
+    // 100 局シミュレーション（autoplay / unseenAutoplay の SEEDS=100、特に全ステップで
+    // 不変条件を検査する重いケース）は、既定の 5s では CI の遅い Runner で時間切れになる。
+    // ローカルは速く通るのに本番 CI だけ落ちるため、余裕のある上限にする（ハングは 30s で検出）。
+    testTimeout: 30_000,
   },
 }))
