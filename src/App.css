@@ -49,6 +49,19 @@
 }
 
 /*
+ * 不活性ボタン（例: 役が未成立のときのツモ確定）。押せないことを薄さで示し、
+ * hover の色替え・押下の沈みも殺す。フィル系変種の背景・影の上から効かせる。
+ *
+ * **全画面の `.button` に意図的に効かせる**（BET/ルール設定/ロスター保存等の既存 disabled ボタンにも
+ * 共通の見た目を与える）。今まで disabled の見た目が未定義だったため、ここで app 共通に定める。
+ */
+.button:disabled {
+  cursor: default;
+  opacity: 0.45;
+  transform: none;
+}
+
+/*
  * 塗りつぶしの主ボタン（金）。タイトル/BET/精算/設定/対局で共通に使う app 共通変種。
  * かつては table.css にあり「対局画面用のはず」と読み違えやすかったため App.css に集約した。
  * **文字は濃色**。金地に白は約2.25:1で不可読（9-1 の `.wait__same` と同じ轍を踏まない）。
@@ -175,6 +188,32 @@
  * { transform: none }` もこの規則が上回るので、持ち上げ（静的な位置）は保たれる。
  */
 .card--clickable.card--waiting:hover {
+  transform: translateY(-12px);
+}
+
+/*
+ * 役の構成として選ばれたカード（絵札の組み替え）。**面の色は塗り替えない**
+ * （面の色＝同色役の判定情報。`card--waiting` と同じ方針）。待ちの白熱色（#ffe58a）と
+ * 区別できるクールなシアンのリング＋持ち上げで示す。
+ *
+ * この規則は **`.card--waiting` より後**に置く。待ち札を選んだとき（両方付く）、
+ * 同詳細度(0,1,0)なら後勝ちで選択リングを優先表示する（ユーザーの能動的選択を勝たせる）。
+ */
+.card--selected {
+  border-color: #5cc8e6;
+  box-shadow:
+    0 0 0 2px #5cc8e6,
+    0 0 16px rgb(92 200 230 / 0.7),
+    0 10px 18px rgb(0 0 0 / 0.45);
+  transform: translateY(-12px);
+}
+
+/*
+ * 選択リングは hover 下でも保つ。`.card--clickable:hover`(0,2,0) の translateY(-6px) に
+ * 詳細度(0,3,0)で勝つ（9-1 の `.card--clickable.card--waiting:hover` と同じ手）。
+ * App.css は import 順で最後に読まれるため、table.css 側の hover にも確実に後勝ちする。
+ */
+.card--clickable.card--selected:hover {
   transform: translateY(-12px);
 }
 
