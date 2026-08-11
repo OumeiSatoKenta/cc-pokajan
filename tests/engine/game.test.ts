@@ -294,6 +294,21 @@ describe('候補の再計算による検証', () => {
     ).toThrow(IllegalActionError)
   })
 
+  it('役種を偽装しても、選んだカードから再計算した役種・点数が採用される', () => {
+    // 検証で使われるのは cards の uid だけ。kind/sameColor/score は無視して再計算される。
+    // a1 の3カード(triple, 120点)を group5(高得点役)に偽装しても triple として確定する。
+    const real = onlyYaku(state, 0)
+    const forged: YakuCandidate = { ...real, kind: 'group5', sameColor: true, score: 999_999 }
+
+    const result = reduce(state, { type: 'DECLARE', playerId: 0, candidate: forged }, DEFAULT_RULES)
+
+    const declared = result.state.players[0].declared[0]
+    expect(declared.kind).toBe('triple')
+    expect(declared.sameColor).toBe(false)
+    expect(declared.score).toBe(120)
+    expect(totalScore(result.state)).toBe(DEFAULT_RULES.startingScore * 4)
+  })
+
   /**
    * CLAIM 側の再計算は DECLARE とは別の呼び出し（`required` 付きの findYaku）を通るため、
    * DECLARE のテストだけでは検証されない。
@@ -358,6 +373,94 @@ describe('候補の再計算による検証', () => {
       expect(current.players[0].score).toBe(DEFAULT_RULES.startingScore - 120)
       expect(current.players[1].declared[0].score).toBe(120)
     })
+  })
+})
+
+describe('非正準の合法選択が宣言経路を通る', () => {
+  it('DECLARE: findYaku の正準とは別の3枚を選んでもツモが成立し、選んだ札が消費される', () => {
+    // a1 を4枚持つ。findYaku の正準は先頭3枚(uid 0,1,2)だが、末尾3枚(uid 1,2,3)を
+    // 選んで宣言しても受理され、残すのは uid 0 になる。
+    // 「正準のみ受理（列挙との uid 一致）」に戻すと verifyCandidate が弾いてこのテストが落ちる。
+    const make = createCardSource()
+    const state = gameState({
+      phase: 'selfDeclare',
+      turn: 0,
+      hands: [
+        make('a1:pink a1:blue a1:orange a1:pink'),
+        make('b1:pink'),
+        make('b2:pink'),
+        make('b3:pink'),
+      ],
+      wall: make('c1:pink c2:pink c3:pink'),
+    })
+    const hand0 = state.players[0].hand
+    const nonCanonical: YakuCandidate = {
+      kind: 'triple',
+      sameColor: false,
+      cards: [hand0[1], hand0[2], hand0[3]],
+      bonusCount: 0,
+      score: 120,
+    }
+
+    const result = reduce(
+      state,
+      { type: 'DECLARE', playerId: 0, candidate: nonCanonical },
+      DEFAULT_RULES,
+    )
+
+    const declared = result.state.players[0].declared[0]
+    expect(declared.kind).toBe('triple')
+    expect(declared.score).toBe(120)
+    expect(declared.cards.map((c) => c.uid).sort((a, b) => a - b)).toEqual([1, 2, 3])
+    // 選ばなかった uid 0 が手札に残っている（正準なら uid 0 が消費され uid 3 が残るはず）。
+    expect(result.state.players[0].hand.some((c) => c.uid === 0)).toBe(true)
+    expect(result.state.players[0].hand.some((c) => c.uid === 1)).toBe(false)
+    expect(totalScore(result.state)).toBe(DEFAULT_RULES.startingScore * 4)
+  })
+
+  it('CLAIM: 捨て札と組む色を選べる（混色を選んで同色札を手に残す）', () => {
+    // 3人組 trio(a1,a2,a3)。手札 a1:pink / a2:pink / a2:blue に a3:pink をロン。
+    // findYaku の正準は「全員ピンク(540点)」だが、a2:blue を使う混色(180点)を選ぶと
+    // a2:pink を手札に残せる。列挙は混色版を出さないため、旧検証ではこの選択は弾かれる。
+    const make = createCardSource()
+    const discard = make('a3:pink')[0]
+    const window = gameState({
+      phase: 'claimWindow',
+      turn: 0,
+      hands: [make('z1:pink'), make('a1:pink a2:pink a2:blue'), make('z2:pink'), make('z3:pink')],
+      wall: make('z4:pink z5:pink z6:pink'),
+      discards: [[discard], [], [], []],
+      lastDiscard: discard,
+      lastDiscardBy: 0,
+      claims: { 1: null, 2: null, 3: null },
+    })
+    // uid は make の呼び出し順に連番: discard=0 / z1=1 / a1:pink=2 a2:pink=3 a2:blue=4。
+    const hand1 = window.players[1].hand
+    const nonCanonical: YakuCandidate = {
+      kind: 'group3',
+      sameColor: false,
+      cards: [hand1[0], hand1[2], discard], // a1:pink(2), a2:blue(4), a3:pink(0)（混色）
+      bonusCount: 0,
+      score: 180,
+    }
+
+    let current = reduce(
+      window,
+      { type: 'CLAIM', playerId: 1, candidate: nonCanonical },
+      DEFAULT_RULES,
+    ).state
+    current = reduce(current, { type: 'PASS', playerId: 2 }, DEFAULT_RULES).state
+    current = reduce(current, { type: 'PASS', playerId: 3 }, DEFAULT_RULES).state
+
+    const declared = current.players[1].declared[0]
+    expect(declared.kind).toBe('group3')
+    expect(declared.sameColor).toBe(false)
+    expect(declared.score).toBe(180)
+    expect(declared.cards.map((c) => c.uid).sort((a, b) => a - b)).toEqual([0, 2, 4])
+    // a2:pink(uid 3) を手札に残せている（正準の全ピンクなら消費されていたはず）。
+    expect(current.players[1].hand.some((c) => c.uid === 3)).toBe(true)
+    expect(current.lastDiscard).toBeNull()
+    expect(totalScore(current)).toBe(DEFAULT_RULES.startingScore * 4)
   })
 })
 

@@ -5,8 +5,14 @@ import { DEFAULT_RULES } from '../../src/config/rules'
 import { setupGame } from '../../src/engine/deck'
 import { createRng } from '../../src/engine/rng'
 import { bestYaku, computeWaits, findYaku, groupYakuKind } from '../../src/engine/yaku'
+import { candidateFromSelection } from '../../src/engine/yakuSelection'
 import type { Card, Group, YakuCandidate, YakuContext, YakuKind } from '../../src/engine/types'
 import { card, context, describeCards, hand, TEST_GROUPS } from '../helpers/cards'
+
+/** 選択ヘルパ: 手札から指定した位置のカードの uid を取り出す。 */
+function uidsAt(cards: readonly Card[], ...positions: number[]): number[] {
+  return positions.map((position) => cards[position].uid)
+}
 
 /** 役種が消費するはずの枚数。 */
 function expectedCardCount(kind: YakuKind): number {
@@ -496,6 +502,268 @@ describe('computeWaits', () => {
     // z1 は activeGroups に含まれないため、3カード待ちでも列挙されない。
     const info = computeWaits(hand('z1:pink z1:blue'), context())
     expect(info.waits).toEqual([])
+  })
+})
+
+describe('candidateFromSelection — 選択からの再導出', () => {
+  it('有効な triple を再導出する', () => {
+    const cards = hand('a1:pink a1:blue a1:orange')
+    const result = candidateFromSelection(cards, uidsAt(cards, 0, 1, 2), context())
+
+    expect(result?.kind).toBe('triple')
+    expect(result?.sameColor).toBe(false)
+    expect(result?.score).toBe(120)
+    expect(result?.cards).toHaveLength(3)
+  })
+
+  it('有効な groupN を再導出する', () => {
+    const cards = hand('a1:pink a2:blue a3:orange')
+    const result = candidateFromSelection(cards, uidsAt(cards, 0, 1, 2), context())
+
+    expect(result?.kind).toBe('group3')
+    expect(result?.score).toBe(180)
+  })
+
+  it('正準以外の合法選択を受理する（同一メンバー4枚のうち別の3枚）', () => {
+    // findYaku は先頭3枚(slice(0,3) = uid 0,1,2)を正準として選ぶ。
+    // 末尾3枚(uid 1,2,3)を選んでも triple として受理されなければならない。
+    // 「正準のみ受理（先頭 N 枚固定）」に壊すとこのテストが落ちる。
+    const cards = hand('a1:pink a1:blue a1:orange a1:pink')
+    const result = candidateFromSelection(cards, uidsAt(cards, 1, 2, 3), context())
+
+    expect(result?.kind).toBe('triple')
+    expect([...(result?.cards ?? [])].map((c) => c.uid).sort((a, b) => a - b)).toEqual([1, 2, 3])
+  })
+
+  it('色の取り方で同色・点数が変わる（同一の役対象でも選択次第）', () => {
+    // a1/a2/a3 それぞれ pink と blue を持つ。3人組を pink で揃えれば同色540点、
+    // 混色に取れば180点。どのカードを選ぶかで役の価値が変わる（本機能の狙い）。
+    const cards = hand('a1:pink a1:blue a2:pink a2:blue a3:pink a3:blue')
+
+    const same = candidateFromSelection(cards, uidsAt(cards, 0, 2, 4), context())
+    expect(same?.sameColor).toBe(true)
+    expect(same?.score).toBe(540)
+
+    const mixed = candidateFromSelection(cards, uidsAt(cards, 0, 3, 4), context())
+    expect(mixed?.sameColor).toBe(false)
+    expect(mixed?.score).toBe(180)
+  })
+
+  it('ボーナス加点も選択カードから再計算する', () => {
+    const ctx = context({ bonusMemberIds: ['a1'] })
+    const cards = hand('a1:pink a1:blue a1:orange')
+    const result = candidateFromSelection(cards, uidsAt(cards, 0, 1, 2), ctx)
+
+    expect(result?.bonusCount).toBe(3)
+    expect(result?.score).toBe(120 + 270)
+  })
+
+  it('今局に登場していないメンバーでも triple は成立する（findYaku と同じ扱い）', () => {
+    const cards = hand('z1:pink z1:blue z1:orange')
+    expect(candidateFromSelection(cards, uidsAt(cards, 0, 1, 2), context())?.kind).toBe('triple')
+  })
+
+  it('メンバー重複のある壊れたグループでも多重集合が一致すれば成立する', () => {
+    const broken: Group = { id: 'broken', name: '壊れた組', memberIds: ['a1', 'a1', 'a2'] }
+    const cards = hand('a1:pink a1:blue a2:pink')
+    const result = candidateFromSelection(
+      cards,
+      uidsAt(cards, 0, 1, 2),
+      context({ groups: [broken] }),
+    )
+
+    expect(result?.kind).toBe('group3')
+    expect(result?.cards).toHaveLength(3)
+  })
+
+  it('全メンバーが同一の壊れたグループでも triple 判定が groupN より優先される', () => {
+    // classifySelection は triple を先に判定する。判定順を入れ替えるリファクタで
+    // この優先順位が壊れたら落ちるようにしておく（設計の明文化された不変を機械的に守る）。
+    const broken: Group = { id: 'broken', name: '壊れた組', memberIds: ['a1', 'a1', 'a1'] }
+    const cards = hand('a1:pink a1:blue a1:orange')
+    const result = candidateFromSelection(
+      cards,
+      uidsAt(cards, 0, 1, 2),
+      context({ groups: [broken] }),
+    )
+
+    expect(result?.kind).toBe('triple')
+  })
+
+  it('枚数が足りない選択は null', () => {
+    const cards = hand('a1:pink a1:blue a1:orange')
+    expect(candidateFromSelection(cards, uidsAt(cards, 0, 1), context())).toBeNull()
+  })
+
+  it('同一メンバー4枚の選択は triple にならない（枚数過多で null）', () => {
+    const cards = hand('a1:pink a1:blue a1:orange a1:pink')
+    expect(candidateFromSelection(cards, uidsAt(cards, 0, 1, 2, 3), context())).toBeNull()
+  })
+
+  it('手札にない uid を含む選択は null（未所持カードの偽装を弾く）', () => {
+    const cards = hand('a1:pink a1:blue a1:orange')
+    expect(
+      candidateFromSelection(cards, [uidsAt(cards, 0)[0], uidsAt(cards, 1)[0], 999], context()),
+    ).toBeNull()
+  })
+
+  it('同じ uid を2度含む選択は null（1枚を二重消費できない）', () => {
+    const cards = hand('a1:pink a1:blue a1:orange')
+    const first = cards[0].uid
+    expect(candidateFromSelection(cards, [first, first, cards[1].uid], context())).toBeNull()
+  })
+
+  it('役にならない混在の選択は null', () => {
+    const cards = hand('a1:pink a2:blue b1:orange')
+    expect(candidateFromSelection(cards, uidsAt(cards, 0, 1, 2), context())).toBeNull()
+  })
+
+  it('空の選択は null', () => {
+    const cards = hand('a1:pink a1:blue a1:orange')
+    expect(candidateFromSelection(cards, [], context())).toBeNull()
+  })
+
+  it('今局に登場していないグループでは groupN にならない', () => {
+    const cards = hand('z1:pink z2:blue z3:orange')
+    expect(candidateFromSelection(cards, uidsAt(cards, 0, 1, 2), context())).toBeNull()
+  })
+
+  describe('ロン規則（required）', () => {
+    it('required が hand に含まれていなければ RangeError を投げる（findYaku と同じ扱い）', () => {
+      // 「required を選択に含まない」（合法な非ロン → null）と「required が手札に存在しない」
+      // （内部の誤用 → RangeError）を区別する。null を返すのが resolveSelection の実装詳細に
+      // 依存した副産物にならないよう、明示的なガードをピン留めする。
+      const combined = hand('a1:pink a1:blue a1:orange')
+      const foreign = card('a2:pink', 99)
+      expect(() =>
+        candidateFromSelection(combined, uidsAt(combined, 0, 1, 2), context(), foreign),
+      ).toThrow(RangeError)
+    })
+
+    it('required を消費しない選択は null（ロンは捨て札で完成して初めて成立）', () => {
+      // 手札に a1 の3カードが完成済み、捨て札 a2:pink をもらう。
+      // a1 triple は合法な役だが required(a2) を使わないのでロンにならない。
+      const combined = hand('a1:pink a1:blue a1:orange a2:pink')
+      const required = combined[3]
+      expect(
+        candidateFromSelection(combined, uidsAt(combined, 0, 1, 2), context(), required),
+      ).toBeNull()
+    })
+
+    it('その1枚で新たに完成する役はロンできる', () => {
+      // 手札 a1:pink a1:blue に捨て札 a1:orange をもらって triple 完成。
+      const combined = hand('a1:pink a1:blue a1:orange')
+      const required = combined[2]
+      const result = candidateFromSelection(
+        combined,
+        uidsAt(combined, 0, 1, 2),
+        context(),
+        required,
+      )
+
+      expect(result?.kind).toBe('triple')
+      expect(result?.score).toBe(120)
+    })
+
+    it('手の内で既に成立している役ではロンできない（null）', () => {
+      // a1 が既に3枚(uid 0,1,2)で完成。4枚目 a1:pink(uid 3)をもらっても新たな完成ではない。
+      // 「required を除いた手札で同シグネチャが成立する」ためロン不可。
+      const combined = hand('a1:pink a1:blue a1:orange a1:pink')
+      const required = combined[3]
+      expect(
+        candidateFromSelection(combined, uidsAt(combined, 1, 2, 3), context(), required),
+      ).toBeNull()
+    })
+
+    it('混色で完成済みでも、その1枚で同色になるならロンできる', () => {
+      // 3人組は混色(a1:pink a2:pink a3:blue)で成立済みだが、a3:pink をもらうと
+      // 「全員ピンク」の同色役が新たに成立する。findYaku のロン絞り込みと同じ判定。
+      const combined = hand('a1:pink a2:pink a3:blue a3:pink')
+      const required = combined[3]
+      const result = candidateFromSelection(
+        combined,
+        uidsAt(combined, 0, 1, 3),
+        context(),
+        required,
+      )
+
+      expect(result?.sameColor).toBe(true)
+      expect(result?.score).toBe(540)
+    })
+  })
+
+  describe('差分オラクル: findYaku の列挙候補は必ず再導出できる', () => {
+    it('シード 0〜99 の全手札で、列挙候補のカードを選ぶと同じ役に再導出される', () => {
+      for (let seed = 0; seed < 100; seed++) {
+        const setup = setupGame(DEFAULT_ROSTER, DEFAULT_RULES, createRng(seed))
+        const ctx: YakuContext = {
+          activeGroups: setup.activeGroups,
+          bonusMemberIds: setup.bonusMemberIds,
+          rules: DEFAULT_RULES,
+        }
+
+        for (const [playerIndex, playerHand] of setup.hands.entries()) {
+          const where = `seed=${seed} player=${playerIndex}`
+          const cards: readonly Card[] = playerHand
+
+          for (const candidate of findYaku(cards, ctx)) {
+            const uids = candidate.cards.map((c) => c.uid)
+            const rederived = candidateFromSelection(cards, uids, ctx)
+
+            // 列挙で見つかった役は、そのカードを選択として渡せば必ず同じ役として再導出できる。
+            // ここが null になると AI 経路（列挙候補を渡す）が reduce で弾かれ、不変条件が壊れる。
+            expect(rederived, `${where} kind=${candidate.kind}`).not.toBeNull()
+            expect(rederived?.kind, where).toBe(candidate.kind)
+            expect(rederived?.sameColor, where).toBe(candidate.sameColor)
+            expect(rederived?.bonusCount, where).toBe(candidate.bonusCount)
+            expect(rederived?.score, where).toBe(candidate.score)
+          }
+        }
+      }
+    })
+
+    it('ロン: probe した捨て札での列挙候補も再導出で一致する（required 付き）', () => {
+      // required あり（ロン）でのみ signature の achievableWithout 照合が働く。
+      // design.md の「混色は任意の単色より緩い → ロン規則が findYaku と一致」という論証は
+      // この経路にしか関係しないため、100 局規模で機械的に検証する。
+      // computeWaits と同じ手法で「実在しない負の uid の仮カード」を捨て札として1枚足し、
+      // findYaku(probed, ctx, probe) の各候補が candidateFromSelection で同一に再導出できることを確かめる。
+      for (let seed = 0; seed < 100; seed++) {
+        const setup = setupGame(DEFAULT_ROSTER, DEFAULT_RULES, createRng(seed))
+        const ctx: YakuContext = {
+          activeGroups: setup.activeGroups,
+          bonusMemberIds: setup.bonusMemberIds,
+          rules: DEFAULT_RULES,
+        }
+        const memberIds = [...new Set(ctx.activeGroups.flatMap((group) => group.memberIds))]
+
+        for (const [playerIndex, playerHand] of setup.hands.entries()) {
+          const cards: readonly Card[] = playerHand
+          const probeUid = cards.reduce((min, c) => Math.min(min, c.uid), 0) - 1
+
+          for (const memberId of memberIds) {
+            for (const color of DEFAULT_RULES.colors) {
+              const probe: Card = { uid: probeUid, memberId, color }
+              const probed = [...cards, probe]
+              const where = `seed=${seed} player=${playerIndex} probe=${memberId}:${color}`
+
+              for (const candidate of findYaku(probed, ctx, probe)) {
+                const uids = candidate.cards.map((c) => c.uid)
+                const rederived = candidateFromSelection(probed, uids, ctx, probe)
+
+                // ロンで列挙された候補は、そのカードを選択として渡せば必ず同じ役に再導出できる。
+                // ここが null になると AI のロン経路が reduce で弾かれ、100 局不変条件が壊れる。
+                expect(rederived, `${where} kind=${candidate.kind}`).not.toBeNull()
+                expect(rederived?.kind, where).toBe(candidate.kind)
+                expect(rederived?.sameColor, where).toBe(candidate.sameColor)
+                expect(rederived?.bonusCount, where).toBe(candidate.bonusCount)
+                expect(rederived?.score, where).toBe(candidate.score)
+              }
+            }
+          }
+        }
+      }
+    })
   })
 })
 
