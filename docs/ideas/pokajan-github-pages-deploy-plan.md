@@ -121,8 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15 # ハング時に Runner を占有し続けない上限
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -157,8 +157,10 @@ jobs:
 - **権限は per-job 最小化**: top-level は `contents: read` のみ。`pages: write` / `id-token: write` は deploy に絞る
   （build は `npm ci`/`npm test` で第三者コードを走らせるため、公開権限を渡さない＝ゲート迂回デプロイを構造的に防ぐ）。
   Step 2 の欠陥・構造の両軸レビューが収束して指摘。GitHub 公式雛形は top-level 一括だが、より厳格に倒す。
-- **アクション版**: 公式 `starter-workflows`（`pages/nextjs.yml`）と実機で照合。`deploy-pages` は公式最新の `@v5`
-  に合わせた（v4→v5 は Node ランタイム更新のみ）。他4つ（checkout@v4/setup-node@v4/configure-pages@v5/upload-pages-artifact@v3）は現行テンプレートと一致。
+- **アクション版**: 公式 `starter-workflows`（`pages/nextjs.yml`）と実機で照合し `deploy-pages@v5`。
+  `checkout` / `setup-node` は当初 `@v4`（公式雛形と同じ）だったが、初回 CI で **Node 20 deprecation 警告**
+  （v4 は node20 ターゲットで node24 に強制実行）が出たため、現行最新の **`@v7`** に更新して警告を解消した
+  （v4→v7 は Node ランタイム更新＋ESM 化が主で破壊的変更なし）。`configure-pages@v5` / `upload-pages-artifact@v3` は据え置き。
 - **`configure-pages@v5`**: 慣例として置く。base は `vite.config.ts` で明示済みなので、その自動注入には依存しない。
 - **`.nojekyll` は付けない**: Actions アーティファクト方式では Jekyll が動かず、かつ Vite 出力は `assets/`
   （アンダースコア無し）。付けても無害だが不要なので「影響の最小化」で省く。

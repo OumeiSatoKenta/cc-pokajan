@@ -17,6 +17,20 @@
 永続化は localStorage（所持コイン・ルール差分・座席アバターの対応）と
 IndexedDB（画像 Blob）。サーバーは存在しない。
 
+## 公開・デプロイ（GitHub Pages）
+
+**本番は GitHub Pages で公開済み**: <https://oumeisatokenta.github.io/cc-pokajan/>（Pages Source =「GitHub Actions」有効化済み）。
+
+- **`main` への push で自動デプロイ**される（`.github/workflows/deploy.yml`）。検証ゲート
+  （lint→typecheck→test→build→format:check、E2E 除く）を通してから公式 Pages アーティファクトで公開するので、
+  **`main` に触る＝本番が更新される**前提で扱うこと。
+- **`vite.config.ts` の `base` は条件付き**（`resolveBase`）: build/preview は `/cc-pokajan/`、dev/vitest/e2e は `/`。
+  ローカル `npm run preview` が `http://localhost:4173/cc-pokajan/`（サブパス）になるのは仕様。回帰は `tests/config/viteBase.test.ts`。
+- 100 局シミュレーション（`autoplay`/`unseenAutoplay`）は CI の遅い Runner で既定 5s を超えるため、
+  `vite.config.ts` の `test.testTimeout` を 30s に設定してある。
+- 計画の一次資料は [docs/ideas/pokajan-github-pages-deploy-plan.md](docs/ideas/pokajan-github-pages-deploy-plan.md)。
+  有料版（AWS+Cognito）は別計画 `docs/ideas/pokajan-aws-portfolio-plan.md` として併存構想。
+
 ## このプロジェクト固有のルール
 
 実装前に [README.md](README.md) の「設計方針」節と、直近の `.steering/*/design.md` を読むこと。
