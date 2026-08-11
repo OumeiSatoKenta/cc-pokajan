@@ -30,8 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15 # ハング時に Runner を占有し続けない上限
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -98,10 +98,11 @@ CLAUDE.md の順で `lint → typecheck → test → build → format:check`。`
 
 ### アクションのバージョン（公式 starter-workflow に一致）
 
-`checkout@v4` / `setup-node@v4` / `configure-pages@v5` / `upload-pages-artifact@v3` / `deploy-pages@v5`。
-API 軸レビューが GitHub 公式 `starter-workflows`（`pages/nextjs.yml`）と実機で突き合わせ、いずれも現行テンプレートと
-一致することを確認した。**`deploy-pages` は当初 `@v4` だったが、公式最新テンプレートが `@v5`**（v4→v5 は Node ランタイム
-更新のみ・破壊的変更なし）のため合わせた。メジャー固定でパッチは自動追随、破壊的変更は避ける。
+`checkout@v7` / `setup-node@v7` / `configure-pages@v5` / `upload-pages-artifact@v3` / `deploy-pages@v5`。
+API 軸レビューが GitHub 公式 `starter-workflows`（`pages/nextjs.yml`）と実機で突き合わせ、`deploy-pages` は
+公式最新の `@v5` に合わせた。**`checkout`/`setup-node` は当初 `@v4`（公式雛形と同じ）だったが、初回 CI で
+Node 20 deprecation 警告が出た**ため現行最新の `@v7` に更新（v4→v7 は Node ランタイム更新＋ESM 化が主で破壊的変更なし）。
+メジャー固定でパッチは自動追随。
 （`upload-pages-artifact@v4` は dotfiles 既定除外の破壊的変更あり。`@v3` のままなら無関係だが将来上げる際は注意。）
 
 ### Node 22 と `cache: npm`

@@ -85,7 +85,7 @@ Step 2: GitHub Actions で Pages へ自動デプロイ
   - **権限は per-job 最小化**: top-level `permissions: contents: read` のみ。`pages: write` / `id-token: write` は
     **deploy ジョブにだけ**付ける（build は第三者コードを走らせるため公開権限を渡さない＝ゲート迂回デプロイを防ぐ）。
     `concurrency: { group: pages, cancel-in-progress: false }`。
-  - `build` ジョブ: `timeout-minutes: 15` / `checkout@v4` → `setup-node@v4`（`node-version: 22`, `cache: npm`）→ `npm ci` →
+  - `build` ジョブ: `timeout-minutes: 15` / `checkout@v7` → `setup-node@v7`（`node-version: 22`, `cache: npm`）→ `npm ci` →
     **検証ゲート（CLAUDE.md の順）** `npm run lint` → `npm run typecheck` → `npm test` → `npm run build` → `npm run format:check` →
     `configure-pages@v5` → `upload-pages-artifact@v3`（`path: ./dist`）。
   - `deploy` ジョブ: `needs: build`、per-job `permissions`（contents:read/pages:write/id-token:write）、`environment: github-pages`、`deploy-pages@v5`。
