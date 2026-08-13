@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# backend（game-api Lambda）のビルド成果物。CI が生成しコミットしない（dist は上で無視済み）。
+backend/function.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -38,6 +38,10 @@
               {
                 "group": ["**/storage/*", "**/storage/**"],
                 "message": "エンジン層は永続化層に依存してはいけません（純粋関数を保つこと）"
+              },
+              {
+                "group": ["**/net/*", "**/net/**"],
+                "message": "エンジン層はネットワーク層に依存してはいけません（副作用・I/O を持たないこと）"
               }
             ]
           }
@@ -68,6 +72,10 @@
               {
                 "group": ["**/ui/**"],
                 "message": "永続化層は UI 層に依存してはいけません"
+              },
+              {
+                "group": ["**/net/*", "**/net/**"],
+                "message": "永続化層はネットワーク層に依存してはいけません"
               }
             ]
           }
@@ -98,6 +106,48 @@
               {
                 "group": ["**/ui/**"],
                 "message": "設定層は UI 層に依存してはいけません"
+              },
+              {
+                "group": ["**/net/*", "**/net/**"],
+                "message": "設定層はネットワーク層に依存してはいけません"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/net/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "message": "ネットワーク層は React に依存してはいけません（UI から注入して使うこと）"
+              },
+              {
+                "name": "react-dom",
+                "message": "ネットワーク層は React に依存してはいけません"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react/*", "react-dom/*"],
+                "message": "ネットワーク層は React に依存してはいけません"
+              },
+              {
+                "group": ["**/ui/**"],
+                "message": "ネットワーク層は UI 層に依存してはいけません（依存の向きは UI → net）"
+              },
+              {
+                "group": ["**/engine/*", "**/engine/**"],
+                "message": "ネットワーク層はエンジン層に依存してはいけません"
+              },
+              {
+                "group": ["**/storage/*", "**/storage/**"],
+                "message": "ネットワーク層は永続化層に依存してはいけません"
               }
             ]
           }

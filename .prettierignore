@@ -9,3 +9,8 @@ docs
 # Playwright の生成物
 test-results
 playwright-report
+
+# Terraform の init 生成物・state（巨大なプロバイダバイナリを prettier が読もうとして落ちる）
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
