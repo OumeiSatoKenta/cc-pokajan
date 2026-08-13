@@ -1,0 +1,115 @@
+name: Deploy to AWS (S3 + CloudFront)
+
+# AWS(S3+CloudFront) への配信。GitHub Pages の deploy.yml とは独立（Pages 併存・あちらは無変更）。
+# 当面は手動トリガのみ（誤爆防止）。main 連動の自動 AWS デプロイは将来。
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: デプロイ先環境
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+
+# 既定は最小権限。AWS の一時クレデンシャルに要る id-token:write は deploy ジョブにだけ付ける。
+permissions:
+  contents: read
+
+# 同一環境の多重デプロイは避けるが、進行中は止めない（取りこぼし防止）。
+concurrency:
+  group: deploy-aws-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # build は npm ci / test で第三者コードを走らせるため AWS クレデンシャルを渡さない
+    # （侵害された依存が直接 AWS を叩くのを防ぐ。deploy.yml と同じ防御姿勢）。
+    # environment: は「環境ごとの VITE_COGNITO_* を解決する」ためだけに付ける。id-token は付けない＝AWS 認証は渡さない。
+    # 副作用: prod に protection rule があると build 前にも承認待ちが入る（意図した多層防御）。
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # CLAUDE.md の検証ゲート（E2E 除く）。どれか落ちれば artifact は上がらず deploy されない。
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # 必須変数が未設定のままだと build は成功してしまう（Vite は undefined でも落ちない）が、実行時に
+      # 認証設定エラー／remote 対局の API 未設定エラーになる。fail-closed でここでデプロイを止める（白画面デプロイの防止）。
+      - name: AWS 版の必須変数を確認
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_APP_CLIENT_ID: ${{ vars.VITE_COGNITO_APP_CLIENT_ID }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: |
+          test -n "$VITE_COGNITO_USER_POOL_ID" || { echo "::error::VITE_COGNITO_USER_POOL_ID が未設定です（GitHub Environment の Variables を設定）"; exit 1; }
+          test -n "$VITE_COGNITO_APP_CLIENT_ID" || { echo "::error::VITE_COGNITO_APP_CLIENT_ID が未設定です"; exit 1; }
+          test -n "$VITE_API_BASE_URL" || { echo "::error::VITE_API_BASE_URL が未設定です（Step 6 remote 対局に必須。terraform output game_api_endpoint を設定）"; exit 1; }
+      - run: npm run build # VITE_DEPLOY_TARGET=aws ＝ base '/'（サイトルート配信）で dist/ を生成
+        env:
+          VITE_DEPLOY_TARGET: aws
+          # Cognito の公開値（Secrets ではなく環境ごとの Variables）。認証プールをビルドに焼き込む。
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_APP_CLIENT_ID: ${{ vars.VITE_COGNITO_APP_CLIENT_ID }}
+          # game-api のベース URL（terraform output game_api_endpoint）。remote transport が Action を送る先。
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      - run: npm run format:check
+      # backend（game-api Lambda）を esbuild で単一バンドル化して zip にする。
+      # esbuild は第三者コードなので AWS クレデンシャルの無い build ジョブで走らせる（deploy.yml と同じ防御姿勢）。
+      # なお lint/typecheck/test は root スクリプトが backend workspace も含むため、ここまでで backend も検査済み。
+      - name: backend Lambda バンドル
+        run: |
+          npm run --workspace @pokajan/game-api build
+          (cd backend/dist && zip -q -r ../function.zip index.mjs*)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ github.event.inputs.environment }}
+          path: ./dist
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lambda-${{ github.event.inputs.environment }}
+          path: backend/function.zip
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # デプロイ権限はこのジョブだけ。role-to-assume には固定キーではなく OIDC の短命クレデンシャルを使う。
+    permissions:
+      contents: read
+      id-token: write
+    # 環境ごとの vars（AWS_*）を使う。GitHub の Environment protection と併用できる。
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ github.event.inputs.environment }}
+          path: ./dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: lambda-${{ github.event.inputs.environment }}
+          path: ./lambda
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      # --delete で S3 上の旧アセットを掃除する（ハッシュ付きファイルの残骸を残さない）。
+      - run: aws s3 sync ./dist "s3://${{ vars.AWS_S3_BUCKET }}" --delete
+      - run: aws cloudfront create-invalidation --distribution-id "${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+      # game-api Lambda のコードを差し替える（terraform が作った関数へ。IAM は UpdateFunctionCode のみ許可）。
+      - name: game-api Lambda を更新
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ vars.AWS_LAMBDA_FUNCTION_NAME }}" \
+            --zip-file fileb://lambda/function.zip \
+            --publish >/dev/null
+          aws lambda wait function-updated --function-name "${{ vars.AWS_LAMBDA_FUNCTION_NAME }}"

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 
 import { readOptions, withTurnMs } from './appOptions'
 import { resolveSettings } from './appSettings'
 import { DEFAULT_ROSTER } from './config/defaultRoster'
+import { deployConfig } from './config/deploy'
 import { DEFAULT_RULES } from './config/rules'
 import type { Roster, RulesConfig } from './engine/types'
 import { loadPrefs, savePrefs } from './storage/prefs'
@@ -46,7 +47,9 @@ export default function App() {
    */
   const [avatars, setAvatars] = useState<AvatarMap>(() => parseAvatars(initial.prefs.avatars))
 
-  const appReducer = useMemo(() => createAppReducer(rules), [rules])
+  // 財布の権威は deployConfig で決まる（aws=サーバー / それ以外=prefs）。値は引数で注入し、appReducer は
+  // deployConfig を直接 import しない（engine/config 非依存の作法）。
+  const appReducer = useMemo(() => createAppReducer(rules, deployConfig.walletSource), [rules])
   const [state, dispatch] = useReducer(appReducer, initial, ({ prefs }) =>
     createInitialAppState({
       wallet: prefs.wallet,
@@ -54,6 +57,13 @@ export default function App() {
       seed: options.seedFromUrl ? options.seed : prefs.lastSeed,
     }),
   )
+
+  /*
+   * server モードの財布同期を**安定参照**にする（`dispatch` は useReducer が返す安定参照）。
+   * 毎レンダー新規のインライン関数を `TableScreen` の effect 依存に渡すと、`SYNC_WALLET` → 再レンダー →
+   * 新しい関数 → effect 再発火 の無限ループになる（server モードでのみ発火する経路）。
+   */
+  const syncWallet = useCallback((wallet: number) => dispatch({ type: 'SYNC_WALLET', wallet }), [])
 
   /*
    * 所持コイン・シード・ロスター・ルールの差分だけを保存する。
@@ -118,6 +128,11 @@ export default function App() {
             avatars={avatars}
             fast={options.fast}
             onSettle={(result) => dispatch({ type: 'FINISH', ...result })}
+            /*
+             * server モードでのみ、対局中に得たサーバー財布（BET 差引後・精算後）を反映する（安定参照の
+             * `syncWallet`）。local モードでは undefined（財布は appReducer が権威で、SYNC_WALLET は使わない）。
+             */
+            onWalletSync={deployConfig.walletSource === 'server' ? syncWallet : undefined}
           />
         )}
 

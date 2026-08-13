@@ -10,13 +10,27 @@ import {
 } from '../../src/ui/appReducer'
 import { DEFAULT_RULES } from '../../src/config/rules'
 import { IllegalActionError } from '../../src/engine/errors'
+import type { OutcomeSummary } from '../../src/ui/transport/transport'
 import { testRules } from '../helpers/game'
 
 const rules = DEFAULT_RULES
-const reducer = createAppReducer(rules)
+// 既定は local モード（Pages・prefs + computePayout）。server モードは末尾の describe で別途検証する。
+const reducer = createAppReducer(rules, 'local')
 
 function initial(overrides: Partial<AppState> = {}): AppState {
   return { ...createInitialAppState({ wallet: 10_000, seed: 13 }), ...overrides }
+}
+
+/**
+ * FINISH アクションの組み立て。local モードでは server 用フィールド（`serverOutcome`/`serverWallet`）は
+ * 使われないので、既定値（null / 0）を入れる。
+ */
+function finish(
+  ranking: readonly number[],
+  scores: readonly number[],
+  humanSeat: number,
+): AppAction {
+  return { type: 'FINISH', ranking, scores, humanSeat, serverOutcome: null, serverWallet: 0 }
 }
 
 /** 1位で終わる順位表（人間は席0）。 */
@@ -42,12 +56,7 @@ describe('画面遷移', () => {
 
   it('精算すると結果画面へ進む', () => {
     const playing = reducer(initial({ screen: 'bet' }), { type: 'PLACE_BET', amount: 1000 })
-    const next = reducer(playing, {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 900, 900, 1000],
-      humanSeat: 0,
-    })
+    const next = reducer(playing, finish(WON, [1200, 900, 900, 1000], 0))
 
     expect(next.screen).toBe('result')
     expect(next.outcome).not.toBeNull()
@@ -111,12 +120,7 @@ describe('精算の反映', () => {
   }
 
   it('1位なら所持コインが増える', () => {
-    const next = reducer(play(10_000, 1000), {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 900, 900, 1000],
-      humanSeat: 0,
-    })
+    const next = reducer(play(10_000, 1000), finish(WON, [1200, 900, 900, 1000], 0))
 
     // 10000 − 1000（BET）+ 3000（1200 × 1 × 2.5）
     expect(next.wallet).toBe(12_000)
@@ -124,12 +128,7 @@ describe('精算の反映', () => {
   })
 
   it('4位で低い点数なら所持コインが減る', () => {
-    const next = reducer(play(10_000, 1000), {
-      type: 'FINISH',
-      ranking: LOST,
-      scores: [400, 1500, 1100, 1000],
-      humanSeat: 0,
-    })
+    const next = reducer(play(10_000, 1000), finish(LOST, [400, 1500, 1100, 1000], 0))
 
     // 10000 − 1000 + 400
     expect(next.wallet).toBe(9_400)
@@ -137,41 +136,21 @@ describe('精算の反映', () => {
   })
 
   it('BET 2000 は増減が倍になる', () => {
-    const small = reducer(play(10_000, 1000), {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
-    const large = reducer(play(10_000, 2000), {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
+    const small = reducer(play(10_000, 1000), finish(WON, [1200, 0, 0, 0], 0))
+    const large = reducer(play(10_000, 2000), finish(WON, [1200, 0, 0, 0], 0))
 
     expect(large.outcome?.payout.net).toBe((small.outcome?.payout.net ?? 0) * 2)
   })
 
   it('人間の席が0番以外でもその席の点数と順位で精算する', () => {
-    const next = reducer(play(10_000, 1000), {
-      type: 'FINISH',
-      ranking: [2, 0, 1, 3],
-      scores: [900, 800, 1300, 1000],
-      humanSeat: 2,
-    })
+    const next = reducer(play(10_000, 1000), finish([2, 0, 1, 3], [900, 800, 1300, 1000], 2))
 
     expect(next.outcome?.payout.rank).toBe(1)
     expect(next.outcome?.payout.finalScore).toBe(1300)
   })
 
   it('精算の前後で所持コインの記録が残る', () => {
-    const next = reducer(play(10_000, 1000), {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
+    const next = reducer(play(10_000, 1000), finish(WON, [1200, 0, 0, 0], 0))
 
     expect(next.outcome?.walletBefore).toBe(9_000)
     expect(next.outcome?.walletAfter).toBe(12_000)
@@ -180,37 +159,22 @@ describe('精算の反映', () => {
   /** BET を経由しない対局は存在しないはずだが、状態としても弾いておく。 */
   it('BET していない状態では精算しない', () => {
     const state = initial({ screen: 'table', bet: null })
-    const next = reducer(state, {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
+    const next = reducer(state, finish(WON, [1200, 0, 0, 0], 0))
 
     expect(next).toBe(state)
   })
 
   it('対局画面にいないときは精算しない', () => {
     const state = initial({ screen: 'title', bet: 1000 })
-    const next = reducer(state, {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
+    const next = reducer(state, finish(WON, [1200, 0, 0, 0], 0))
 
     expect(next).toBe(state)
   })
 
   it('順位表に人間がいなければ黙って0位扱いにせず例外', () => {
-    expect(() =>
-      reducer(play(10_000, 1000), {
-        type: 'FINISH',
-        ranking: [1, 2, 3],
-        scores: [1200, 0, 0, 0],
-        humanSeat: 0,
-      }),
-    ).toThrow(IllegalActionError)
+    expect(() => reducer(play(10_000, 1000), finish([1, 2, 3], [1200, 0, 0, 0], 0))).toThrow(
+      IllegalActionError,
+    )
   })
 })
 
@@ -229,24 +193,14 @@ describe('シードの採番', () => {
 
   it('精算のときだけシードが1つ進む', () => {
     const playing = reducer(initial({ seed: 13 }), { type: 'PLACE_BET', amount: 1000 })
-    const settled = reducer(playing, {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
+    const settled = reducer(playing, finish(WON, [1200, 0, 0, 0], 0))
 
     expect(settled.seed).toBe(14)
   })
 
   it('タイトルへ戻ってもシードは戻らない', () => {
     const playing = reducer(initial({ seed: 13 }), { type: 'PLACE_BET', amount: 1000 })
-    const settled = reducer(playing, {
-      type: 'FINISH',
-      ranking: WON,
-      scores: [1200, 0, 0, 0],
-      humanSeat: 0,
-    })
+    const settled = reducer(playing, finish(WON, [1200, 0, 0, 0], 0))
 
     expect(reducer(settled, { type: 'GO_TITLE' }).seed).toBe(14)
   })
@@ -285,6 +239,98 @@ describe('コインの補充', () => {
     const next = reducer(topped, { type: 'PLACE_BET', amount: 1000 })
 
     expect(next.screen).toBe('table')
+  })
+})
+
+describe('server モードの財布（walletSource=server）', () => {
+  const serverReducer = createAppReducer(rules, 'server')
+
+  const SERVER_OUTCOME: OutcomeSummary = {
+    payout: {
+      finalScore: 1200,
+      bet: 1000,
+      betMultiplier: 1,
+      rank: 1,
+      rankMultiplier: 2.5,
+      gross: 3000,
+      net: 2000,
+    },
+    ranking: WON,
+    scores: [1200, 900, 900, 1000],
+  }
+
+  /**
+   * server モードは BET を**ローカルで控除しない**（サーバーが createGame で debit し、その後の snapshot の
+   * wallet を SYNC_WALLET で反映する）。→ create 失敗時も残高固着が起きない。
+   */
+  it('PLACE_BET でローカル残高を控除しない', () => {
+    const next = serverReducer(initial({ wallet: 10_000, screen: 'bet' }), {
+      type: 'PLACE_BET',
+      amount: 2000,
+    })
+
+    expect(next.screen).toBe('table')
+    expect(next.bet).toBe(2000)
+    expect(next.wallet).toBe(10_000) // 控除しない（local は 8_000 になる）
+  })
+
+  it('SYNC_WALLET でサーバー権威の財布を反映する', () => {
+    const next = serverReducer(initial({ wallet: 10_000 }), { type: 'SYNC_WALLET', wallet: 7_777 })
+
+    expect(next.wallet).toBe(7_777)
+  })
+
+  /**
+   * **値が同じなら同一参照を返す**（onWalletSync の無限ループ対策の第2層）。App.tsx の安定コールバックが
+   * 主対策だが、他の呼び出し元が非メモ化コールバックを渡しても、ここで無駄な再レンダーの芽を摘む。
+   */
+  it('SYNC_WALLET は値が同じなら同一参照を返す', () => {
+    const state = initial({ wallet: 5_000 })
+
+    expect(serverReducer(state, { type: 'SYNC_WALLET', wallet: 5_000 })).toBe(state)
+    expect(serverReducer(state, { type: 'SYNC_WALLET', wallet: 6_000 }).wallet).toBe(6_000)
+  })
+
+  /**
+   * server モードの精算は**サーバー値をそのまま使う**（`computePayout` を再計算しない＝localStorage 改竄が
+   * 精算に効かない）。財布・順位・内訳はすべて `serverOutcome`/`serverWallet` 由来。
+   */
+  it('FINISH はサーバー精算とサーバー財布を採用する（computePayout を呼ばない）', () => {
+    const playing = serverReducer(initial({ wallet: 9_000, screen: 'bet' }), {
+      type: 'PLACE_BET',
+      amount: 1000,
+    })
+    const next = serverReducer(playing, {
+      type: 'FINISH',
+      ranking: WON,
+      scores: [1200, 900, 900, 1000],
+      humanSeat: 0,
+      serverOutcome: SERVER_OUTCOME,
+      serverWallet: 12_345,
+    })
+
+    expect(next.screen).toBe('result')
+    expect(next.wallet).toBe(12_345) // サーバー値をそのまま
+    expect(next.outcome?.payout).toBe(SERVER_OUTCOME.payout) // 内訳もサーバー由来（同一参照）
+    expect(next.outcome?.walletAfter).toBe(12_345)
+  })
+
+  /** server モードなのに outcome が無いのは異常。黙って local 計算に落とさず、精算を進めない。 */
+  it('server モードで serverOutcome が null なら精算しない', () => {
+    const playing = serverReducer(initial({ wallet: 9_000, screen: 'bet' }), {
+      type: 'PLACE_BET',
+      amount: 1000,
+    })
+    const next = serverReducer(playing, {
+      type: 'FINISH',
+      ranking: WON,
+      scores: [1200, 900, 900, 1000],
+      humanSeat: 0,
+      serverOutcome: null,
+      serverWallet: 12_345,
+    })
+
+    expect(next).toBe(playing)
   })
 })
 

@@ -1,34 +1,74 @@
 import { describe, expect, it } from 'vitest'
 
-import { createLoopReducer, winKey, type LoopState } from '../../src/ui/hooks/loopReducer'
+import {
+  createInitialLoopState,
+  createLoopReducer,
+  winKey,
+  type LoopState,
+} from '../../src/ui/hooks/loopReducer'
+import { reduce } from '../../src/engine/game'
+import { redactEvents, toPlayerView } from '../../src/engine/playerView'
 import { yakuContextOf } from '../../src/engine/gameSelectors'
 import { findYaku } from '../../src/engine/yaku'
-import { DEFAULT_RULES } from '../../src/config/rules'
 import { createCardSource, gameState, testRules } from '../helpers/game'
-import type { GameState, YakuCandidate } from '../../src/engine/types'
+import type { GameSnapshot } from '../../src/ui/transport/transport'
+import type { Action, GameEvent, GameState, YakuCandidate } from '../../src/engine/types'
 
 /**
  * 和了の確認ゲート（Step 7-4）の検証。
  *
- * **止まることそのものより、「止まっている間に何も進まない」ことが本体。**
- * 効果（`useEffect`）の停止は E2E でしか踏めないが、状態の側で受理されないことは
- * ここで固定できる。画面の無効化だけに頼らないという方針の担保でもある。
+ * Step 6 で「状態を進める」のは `localTransport`（engine `reduce`）に移り、`loopReducer` は snapshot の
+ * events から **和了演出（`pendingWins`）を折り込む**役割になった。ここではその折り込み（`collectWins` 由来の
+ * `scoresBefore`/`scoresAfter`・`winKind`・連続和了の1件ずつ）と `DISMISS_WIN` の鍵照合を固定する。
+ *
+ * **「停止中は進めない」進行停止そのものは `useGameLoop`（apply を呼ぶ前の `isPaused` ゲート）＋ E2E
+ * `winGate.spec.ts` が担う**（リデューサは transport が独立に進めた snapshot を折り込むだけなので、
+ * リデューサ内で INGEST を握り潰すと view が transport とずれる。ゲートは apply 側に置く）。
  */
 
 const HUMAN = 0
 const RULES = testRules({ handSize: 3 })
+let versionCounter = 1
 
-function wrap(game: GameState, overrides: Partial<LoopState> = {}): LoopState {
+function snapshotOf(game: GameState, events: readonly GameEvent[] = []): GameSnapshot {
   return {
-    game,
-    pending: [],
-    gameOverReason: null,
-    ranking: null,
-    timeLimitMs: RULES.turnTimer.initialMs,
-    drawnUid: null,
-    pendingWins: [],
+    id: 'local',
+    version: ++versionCounter,
+    view: toPlayerView(game, HUMAN),
+    events: redactEvents(events, HUMAN),
+    wallet: 0,
+    outcome: null,
+  }
+}
+
+/** engine action を1手適用し、snapshot と次の game を返す（localTransport と同じ生成）。 */
+function apply(game: GameState, action: Action): { snapshot: GameSnapshot; next: GameState } {
+  const result = reduce(game, action, RULES)
+  return { snapshot: snapshotOf(result.state, result.events), next: result.state }
+}
+
+function seed(game: GameState, overrides: Partial<LoopState> = {}): LoopState {
+  return {
+    ...createInitialLoopState(RULES),
+    view: toPlayerView(game, HUMAN),
+    version: 1,
     ...overrides,
   }
+}
+
+const reducer = createLoopReducer(RULES)
+
+function ingest(
+  state: LoopState,
+  snapshot: GameSnapshot,
+  extra: { isTimeout?: boolean; accepted?: boolean } = {},
+): LoopState {
+  return reducer(state, {
+    type: 'INGEST',
+    snapshot,
+    isTimeout: extra.isTimeout ?? false,
+    accepted: extra.accepted ?? true,
+  })
 }
 
 /** ツモ宣言できる局面。プレイヤー0 が `a1` の3カードを持っている。 */
@@ -49,17 +89,25 @@ function onlyYaku(state: GameState, playerId: number): YakuCandidate {
   return candidates[0]
 }
 
-describe('和了で確認待ちになる', () => {
-  const reducer = createLoopReducer(RULES, HUMAN)
+/** 演出待ち（pendingWins に1件）の LoopState を作る。 */
+function paused(): LoopState {
+  const state = tsumoReady()
+  const candidate = onlyYaku(state, 0)
+  const next = ingest(
+    seed(state),
+    apply(state, { type: 'DECLARE', playerId: 0, candidate }).snapshot,
+  )
+  expect(next.pendingWins).toHaveLength(1)
+  return next
+}
 
-  it('DECLARE で pendingWins が1件積まれる', () => {
+describe('和了で演出待ちが積まれる', () => {
+  it('DECLARE の snapshot で pendingWins が1件積まれる', () => {
     const state = tsumoReady()
     const candidate = onlyYaku(state, 0)
+    const { snapshot } = apply(state, { type: 'DECLARE', playerId: 0, candidate })
 
-    const next = reducer(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate },
-    })
+    const next = ingest(seed(state), snapshot)
 
     expect(next.pendingWins).toHaveLength(1)
     expect(next.pendingWins[0].playerId).toBe(0)
@@ -67,123 +115,63 @@ describe('和了で確認待ちになる', () => {
     expect(next.pendingWins[0].candidate.kind).toBe('triple')
   })
 
-  /** 和了でないアクションで止まると、対局が一歩も進まなくなる。 */
-  it('和了でないアクションでは積まれない', () => {
-    const next = reducer(wrap(tsumoReady()), {
-      type: 'ENGINE',
-      action: { type: 'SKIP_DECLARE' },
-    })
+  it('和了でないアクション（SKIP_DECLARE）では積まれない', () => {
+    const state = tsumoReady()
+    const next = ingest(seed(state), apply(state, { type: 'SKIP_DECLARE' }).snapshot)
 
     expect(next.pendingWins).toEqual([])
   })
 
   /**
-   * **7-5 の得点移動が使うデータ。**
-   *
-   * `reduce` 後の `game.players[].score` から逆算しないのが要点で、
-   * 1回の `reduce` で複数の和了が起きたときに全部が同じ最終点数になってしまう。
+   * **7-5 の得点移動が使うデータ。** `scoresBefore` は INGEST 前の view の点数（Paid で前進）。1回の
+   * reduce で複数和了が起きても、走査で点数を持ち回るのでそれぞれの始点が正しく入る。
    */
   it('適用前後の点数を持つ', () => {
     const state = tsumoReady()
     const candidate = onlyYaku(state, 0)
     const before = state.players.map((player) => player.score)
 
-    const next = reducer(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate },
-    })
+    const next = ingest(
+      seed(state),
+      apply(state, { type: 'DECLARE', playerId: 0, candidate }).snapshot,
+    )
     const win = next.pendingWins[0]
 
     expect(win.scoresBefore).toEqual(before)
-    // 適用後は実際のエンジンの点数と一致する
-    expect(win.scoresAfter).toEqual(next.game.players.map((player) => player.score))
+    // 適用後は snapshot の view の点数（＝エンジンの点数）と一致する。
+    expect(win.scoresAfter).toEqual(next.view?.players.map((player) => player.score))
     expect(win.scoresAfter[0]).toBeGreaterThan(win.scoresBefore[0])
   })
 
-  /**
-   * ツモは他3人が等分で支払う。**演出に出す増減は前後の差分から作る**ので、
-   * 支払った側が減り、合計が動かないことを差分の側で確かめる。
-   */
+  /** ツモは他3人が等分で支払う。増減は前後の差分から作るので、支払った側が減り総和が動かない。 */
   it('増減が支払いの形と一致する（ツモは他3人が減る）', () => {
     const state = tsumoReady()
     const candidate = onlyYaku(state, 0)
 
-    const next = reducer(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate },
-    })
+    const next = ingest(
+      seed(state),
+      apply(state, { type: 'DECLARE', playerId: 0, candidate }).snapshot,
+    )
     const win = next.pendingWins[0]
     const deltas = win.scoresAfter.map((score, id) => score - (win.scoresBefore[id] ?? 0))
 
     expect(deltas[0]).toBeGreaterThan(0)
     expect(deltas.slice(1).every((delta) => delta < 0)).toBe(true)
-
-    // 点数保存則。演出の数字を足しても場の総和は動かない。
     expect(deltas.reduce((sum, delta) => sum + delta, 0)).toBe(0)
   })
 })
 
-describe('演出を閉じるまで進まない', () => {
-  const reducer = createLoopReducer(RULES, HUMAN)
-
-  /** 演出待ちの状態を作る。 */
-  function paused(): LoopState {
-    const state = tsumoReady()
-    const candidate = onlyYaku(state, 0)
-    const next = reducer(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate },
-    })
-
-    expect(next.pendingWins).toHaveLength(1)
-    return next
-  }
-
-  /**
-   * **効果を止めるだけでは足りない。**
-   * オーバーレイの外側・キーボード操作・E2E からの直接クリックは残るため、
-   * 状態の側でも受け付けない（`PLACE_BET` と同じ方針）。
-   */
-  it('停止中は ENGINE が受理されない', () => {
-    const state = paused()
-    const next = reducer(state, { type: 'ENGINE', action: { type: 'SKIP_DECLARE' } })
-
-    expect(next).toBe(state)
-    expect(next.game.phase).toBe(state.game.phase)
-  })
-
-  /**
-   * **止め忘れると演出を読んでいる間にツモ切りされる。**
-   * しかも持ち時間まで削られるため、次の手番が短くなる。
-   */
-  it('停止中は TIMEOUT で持ち時間が減らない', () => {
-    const state = paused()
-    const next = reducer(state, { type: 'TIMEOUT', action: { type: 'SKIP_DECLARE' } })
-
-    expect(next).toBe(state)
-    expect(next.timeLimitMs).toBe(state.timeLimitMs)
-  })
-
-  it('DISMISS_WIN で解除され、再び進められる', () => {
+describe('DISMISS_WIN の鍵照合', () => {
+  it('DISMISS_WIN で解除される', () => {
     const state = paused()
     const dismissed = reducer(state, { type: 'DISMISS_WIN', key: winKey(state.pendingWins[0]) })
 
     expect(dismissed.pendingWins).toEqual([])
-
-    const advanced = reducer(dismissed, { type: 'ENGINE', action: { type: 'SKIP_DECLARE' } })
-    expect(advanced.game.phase).not.toBe(dismissed.game.phase)
   })
 
   /**
-   * **鍵が合わなければ何も落とさない。**
-   *
-   * 閉じる操作は自動クローズ・オーバーレイのクリック・パネル内のボタン・Escape の
-   * 4経路から来る。ボタンの click はオーバーレイまで泡立つため、素直に書くと
-   * 1回の操作で2回走る。鍵なしで「先頭を落とす」実装だと**2件消え**、
-   * 連続和了の2件目が黙って飛ぶ（プレイヤーには点数バグに見える）。
-   *
-   * `stopPropagation` で塞ぐ手もあるが、それは「今の DOM 構造ではたまたま漏れない」
-   * 形の正しさになる。ここで固定するのは構造に依存しない側の保証。
+   * **鍵が合わなければ何も落とさない。** 閉じる操作は自動クローズ・オーバーレイのクリック・パネル内の
+   * ボタン・Escape の4経路から来る。鍵なしで「先頭を落とす」と二重に走って2件消え、連続和了の2件目が飛ぶ。
    */
   it('鍵が合わない DISMISS_WIN は何も落とさない', () => {
     const state = paused()
@@ -193,7 +181,6 @@ describe('演出を閉じるまで進まない', () => {
     expect(next.pendingWins).toHaveLength(1)
   })
 
-  /** 同じ鍵で2回送っても1件しか落ちない（泡立ちと二重クリックの再現）。 */
   it('同じ鍵を2回送っても落ちるのは1件だけ', () => {
     const state = paused()
     const key = winKey(state.pendingWins[0])
@@ -206,14 +193,14 @@ describe('演出を閉じるまで進まない', () => {
   })
 
   it('空の状態で DISMISS_WIN を送っても落ちない', () => {
-    const state = wrap(tsumoReady())
+    const state = seed(tsumoReady())
 
     expect(() => reducer(state, { type: 'DISMISS_WIN', key: 'なんでもよい' })).not.toThrow()
     expect(reducer(state, { type: 'DISMISS_WIN', key: 'なんでもよい' }).pendingWins).toEqual([])
   })
 
-  /** 表示済みイベントの掃除は進行ではないので、止めない。 */
-  it('停止中でも EVENTS_CONSUMED は通る', () => {
+  /** 表示済みイベントの掃除は進行ではないので、演出待ちでも通す。 */
+  it('演出待ちでも EVENTS_CONSUMED は通る', () => {
     const state = paused()
     const next = reducer(state, { type: 'EVENTS_CONSUMED', count: state.pending.length })
 
@@ -223,15 +210,12 @@ describe('演出を閉じるまで進まない', () => {
 })
 
 describe('連続宣言', () => {
-  const reducer = createLoopReducer(RULES, HUMAN)
-
   /**
-   * ポカジャンは和了しても局が終わらない。**1回の和了につき1回止まる**ことで、
-   * 連続宣言でも取りこぼさずに見せられる。
+   * ポカジャンは和了しても局が終わらない。**1回の和了につき1件ずつ積まれ、1件ずつ解除される。**
+   * 2回目の始点は1回目の終点（点数が飛ばない）。
    */
-  it('1回の和了につき1件ずつ積まれ、1件ずつ解除される', () => {
+  it('1件ずつ積まれ、2回目の始点が1回目の終点になる', () => {
     const make = createCardSource()
-    // `a1` の3カードと `b1` の3カードを同時に持ち、2回続けて宣言できる手札
     const state = gameState({
       phase: 'selfDeclare',
       turn: 0,
@@ -249,45 +233,30 @@ describe('連続宣言', () => {
     expect(candidates.length).toBeGreaterThanOrEqual(2)
 
     // 1回目
-    let current = reducer(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate: candidates[0] },
-    })
+    const first = apply(state, { type: 'DECLARE', playerId: 0, candidate: candidates[0] })
+    let current = ingest(seed(state), first.snapshot)
     expect(current.pendingWins).toHaveLength(1)
-    expect(current.game.phase).toBe('selfDeclare')
+    expect(current.view?.phase).toBe('selfDeclare')
 
-    // 閉じるまで2回目は宣言できない
-    const blocked = reducer(current, {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate: candidates[1] },
-    })
-    expect(blocked).toBe(current)
-
+    // 閉じる
     current = reducer(current, { type: 'DISMISS_WIN', key: winKey(current.pendingWins[0]) })
     expect(current.pendingWins).toEqual([])
 
-    // 2回目
-    const second = findYaku(current.game.players[0].hand, yakuContextOf(current.game, RULES))
+    // 2回目（1回目適用後の game・手札から）
+    const second = findYaku(first.next.players[0].hand, yakuContextOf(first.next, RULES))
     expect(second.length).toBeGreaterThan(0)
+    current = ingest(
+      current,
+      apply(first.next, { type: 'DECLARE', playerId: 0, candidate: second[0] }).snapshot,
+    )
 
-    current = reducer(current, {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate: second[0] },
-    })
     expect(current.pendingWins).toHaveLength(1)
-
-    // 2回目の始点は1回目の終点（点数が飛ばない）
+    // 2回目の始点は1回目の終点（＝ INGEST 前の view の点数）。開始点より高い。
     expect(current.pendingWins[0].scoresBefore[0]).toBeGreaterThan(RULES.startingScore)
   })
 })
 
 describe('winKey', () => {
-  const reducer = createLoopReducer(RULES, HUMAN)
-
-  /**
-   * 鍵は「誰が・どのカードで」和了したかで決まる。構成カードは成立した時点で
-   * 場から取り除かれ二度と戻らないため、1局のうちに重複しない。
-   */
   it('和了ごとに異なる鍵になる', () => {
     const make = createCardSource()
     const state = gameState({
@@ -304,31 +273,27 @@ describe('winKey', () => {
     })
 
     const candidates = findYaku(state.players[0].hand, yakuContextOf(state, RULES))
-
-    let current = reducer(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate: candidates[0] },
-    })
+    const first = apply(state, { type: 'DECLARE', playerId: 0, candidate: candidates[0] })
+    let current = ingest(seed(state), first.snapshot)
     const firstKey = winKey(current.pendingWins[0])
 
     current = reducer(current, { type: 'DISMISS_WIN', key: firstKey })
-    const second = findYaku(current.game.players[0].hand, yakuContextOf(current.game, RULES))
-    current = reducer(current, {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate: second[0] },
-    })
+    const second = findYaku(first.next.players[0].hand, yakuContextOf(first.next, RULES))
+    current = ingest(
+      current,
+      apply(first.next, { type: 'DECLARE', playerId: 0, candidate: second[0] }).snapshot,
+    )
 
     expect(winKey(current.pendingWins[0])).not.toBe(firstKey)
   })
 
-  /** 同じ和了からは何度呼んでも同じ鍵。React の `key` として使うために必要。 */
   it('同じ和了からは同じ鍵になる', () => {
     const state = tsumoReady()
     const candidate = onlyYaku(state, 0)
-    const next = createLoopReducer(RULES, HUMAN)(wrap(state), {
-      type: 'ENGINE',
-      action: { type: 'DECLARE', playerId: 0, candidate },
-    })
+    const next = ingest(
+      seed(state),
+      apply(state, { type: 'DECLARE', playerId: 0, candidate }).snapshot,
+    )
 
     expect(winKey(next.pendingWins[0])).toBe(winKey(next.pendingWins[0]))
     expect(winKey(next.pendingWins[0])).toContain('0:')
@@ -337,8 +302,7 @@ describe('winKey', () => {
 
 describe('初期状態', () => {
   it('対局開始時は演出待ちが無い', () => {
-    const reducer = createLoopReducer(DEFAULT_RULES, HUMAN)
-    const state = wrap(tsumoReady())
+    const state = seed(tsumoReady())
 
     expect(state.pendingWins).toEqual([])
     expect(reducer(state, { type: 'EVENTS_CONSUMED', count: 0 }).pendingWins).toEqual([])

@@ -16,7 +16,10 @@ cc-pokajan/
 │   ├── ui/                     # 画面とフック（Step 4〜）
 │   │   ├── screens/            # 画面単位のコンポーネント
 │   │   ├── components/         # 再利用する部品
-│   │   └── hooks/              # React フック
+│   │   ├── hooks/              # React フック
+│   │   ├── transport/          # 対局遷移の差し替え点 GameTransport（local/remote・Step 6〜。engine+net に依存＝UI 層に置く）
+│   │   └── auth/               # AWS 版のログインゲート（aws-amplify・lazy chunk。Pages 版は素通し）
+│   ├── net/                    # AWS 版の API クライアント（Bearer 付与土台・Step 4〜。engine/ui 非依存）
 │   ├── App.tsx                 # 画面ステートマシン
 │   ├── App.css
 │   ├── main.tsx                # エントリポイント
@@ -31,6 +34,22 @@ cc-pokajan/
 ├── docs/                       # 永続ドキュメント
 │   └── ideas/                  # 壁打ち・計画書
 ├── .steering/                  # 作業単位のドキュメント（コミットする）
+├── backend/                    # AWS 版の game-api Lambda（monorepo workspace @pokajan/game-api・Step 5〜）
+│   ├── src/                    #   index/app/router/http/auth/dto/gameFlow(純粋)/gameConfig/respond
+│   │   ├── repo/              #     gameRepo（楽観ロック Tx）/ userRepo（wallet）
+│   │   └── routes/           #     createGame / applyAction / getGame
+│   ├── tests/                 #   独立 vitest（fakeDoc で実 AWS 無しに 409/402/redaction を検査）
+│   ├── tsconfig.json          #   独立（root の tsc -b グラフ外）・paths @engine/@config
+│   ├── esbuild.config.mjs     #   node22/esm/arm 単一バンドル（@aws-sdk も同梱）
+│   └── vitest.config.ts       #   resolve.alias で @engine/@config
+├── infra/                      # AWS 版の Terraform（Step 3〜。静的配信 + 認証 + サーバー権威 API）
+│   ├── bootstrap/              #   一度だけ apply: tfstate 用 S3 + OIDC provider + 環境別 DeployRole
+│   ├── modules/frontend/       #   private S3 + CloudFront(OAC) + SPA rewrite
+│   ├── modules/cognito/        #   User Pool + public app client（Step 4〜）
+│   ├── modules/dynamodb/       #   単一テーブル（PK pk・GAME#/USER# 同居・Step 5〜）
+│   ├── modules/game-api/       #   HTTP API + JWT authorizer + Lambda + IAM + Logs（Step 5〜）
+│   └── environments/{dev,prod}/ #   環境ごとの配線（S3 backend + use_lockfile）
+├── .github/workflows/          # deploy.yml（Pages）／deploy-aws.yml（AWS・手動トリガ）
 ├── .devcontainer/              # 開発コンテナ設定
 ├── .claude/                    # Claude Code 設定
 ├── scripts/                    # 補助スクリプト
@@ -44,6 +63,17 @@ cc-pokajan/
 
 **ルート直下に `config/` を置かない**。設定はアプリケーションのコードであり、
 `src/config/` に置く。ルート直下はツール設定（`vite.config.ts` 等）のみとする。
+
+**AWS 版の monorepo メンバー**: `backend/`（game-api Lambda・npm workspace・**Step 5 で実装済み**）と `infra/`（Terraform・
+**Step 3 で追加済み**）は AWS 版だけが使う。GitHub Pages 版はこれらに触れず「サーバーを持たない」構成を維持する
+（[architecture.md](architecture.md) の該当注記・[ideas/cc-pokajan-aws-deployment-plan-revised.md](ideas/cc-pokajan-aws-deployment-plan-revised.md) 参照）。
+`backend/` は `src/engine` を `@engine/*` エイリアスで**共有**（物理移動せず・再実装なし）し、ツールチェーン（独立 tsconfig・
+esbuild・vitest の3点で同じエイリアスを解決）はルートの `tsc -b` グラフから切り離す。root の `typecheck`/`test` は
+末尾に backend workspace を**追加的に**連結し、CLAUDE.md の検証ゲート1本で両方を検査する。
+`infra/` は Terraform のみで `src/**`・tsconfig グラフに一切依存しない。機械ゲートは `terraform fmt -check` と
+`terraform validate`（`-backend=false` init 後）。実 apply とブラウザ確認は AWS 認証情報が要るため `infra/README.md` の手順に従う。
+`.terraform.lock.hcl` は 3 root ともコミットする（プロバイダ版・ハッシュ固定）。`.github/workflows/deploy-aws.yml` は既存
+`deploy.yml`（Pages）と**独立・無変更で併存**し、`VITE_DEPLOY_TARGET=aws` ビルドを OIDC 経由で S3 へ配信する（当面手動トリガ）。
 
 ## ディレクトリ詳細
 
@@ -70,6 +100,9 @@ cc-pokajan/
 | `win.ts`            | 和了1回分の処理                                        |
 | `game.ts`           | 状態機械の入口。`createGame` / `reduce`                |
 | `ai.ts`             | CPU 思考                                               |
+| `autoAction.ts`     | CPU/自動進行の意思決定・割り込み候補の列挙             |
+| `playerView.ts`     | プレイヤー1人分の公開ビュー生成（redaction）           |
+| `viewDerive.ts`     | PlayerView から UI 派生値（候補/待ち/残枚数/フラグ）を導出（Step 6〜） |
 | `autoplay.ts`       | 全員 CPU で1局を回すヘルパ                             |
 
 **命名規則**:

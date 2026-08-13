@@ -1,0 +1,39 @@
+{
+  /*
+   * backend（@pokajan/game-api）専用の独立した型検査設定。
+   *
+   * **root の `tsc -b` グラフ（tsconfig.app.json / tsconfig.test.json）には入れない。**
+   * Vite テンプレートは composite を使わない全 noEmit 構成で、leaf 間に references を張ると
+   * TS6306 / TS6310 で落ちる（tsconfig.test.json のコメント参照）。backend は完全に別グラフとして
+   * `tsc --noEmit -p tsconfig.json` で検査する。フロントの typecheck/build/test/lint はこの設定の影響を受けない。
+   *
+   * engine 共有: `@engine/*` → `../src/engine/*`、`@config/*` → `../src/config/*` を paths で解決する
+   * （esbuild.config.mjs の alias・vitest.config.ts の resolve.alias と三点で一致させる）。
+   */
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node", "aws-lambda"],
+    "skipLibCheck": true,
+
+    // baseUrl は TS6 で非推奨。paths は tsconfig の位置基準で解決される（../src/*）。
+    "paths": {
+      "@engine/*": ["../src/engine/*"],
+      "@config/*": ["../src/config/*"]
+    },
+
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* frontend（tsconfig.app.json）と同水準の strict 設定 */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src", "tests"]
+}

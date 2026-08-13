@@ -30,4 +30,26 @@ describe('resolveBase（vite.config の base 解決）', () => {
   it('isPreview 未指定（undefined）でも dev は /（=== true の明示比較を固定）', () => {
     expect(resolveBase({ command: 'serve' })).toBe('/')
   })
+
+  // AWS 版（S3+CloudFront）はサイトルート配信。target='aws' は command/isPreview を問わず '/'。
+  it('AWS ターゲット（target=aws）は build/preview/dev すべて /', () => {
+    expect(resolveBase({ command: 'build', isPreview: false }, 'aws')).toBe('/')
+    expect(resolveBase({ command: 'serve', isPreview: true }, 'aws')).toBe('/')
+    expect(resolveBase({ command: 'serve', isPreview: false }, 'aws')).toBe('/')
+  })
+
+  // 未知の target・undefined は Pages の分岐へフォールバック（aws だけを特別扱いする）。
+  it('未知/未指定の target は Pages 分岐にフォールバック（build→/cc-pokajan/, dev→/）', () => {
+    expect(resolveBase({ command: 'build', isPreview: false }, 'foo')).toBe('/cc-pokajan/')
+    expect(resolveBase({ command: 'serve', isPreview: false }, 'foo')).toBe('/')
+    expect(resolveBase({ command: 'build', isPreview: false }, undefined)).toBe('/cc-pokajan/')
+  })
+
+  // target は厳密一致（trim/大文字小文字の吸収なし）。deploy.ts の deriveDeployConfig と対称に固定し、
+  // deploy-aws.yml の手書き YAML で `VITE_DEPLOY_TARGET: AWS` のような typo を書いても aws 扱いしないことを担保。
+  it('target の大文字・前後空白ゆらぎは aws 扱いしない（厳密一致・Pages 分岐へ）', () => {
+    expect(resolveBase({ command: 'build', isPreview: false }, 'AWS')).toBe('/cc-pokajan/')
+    expect(resolveBase({ command: 'build', isPreview: false }, 'aws ')).toBe('/cc-pokajan/')
+    expect(resolveBase({ command: 'build', isPreview: false }, ' aws')).toBe('/cc-pokajan/')
+  })
 })
