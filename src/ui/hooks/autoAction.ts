@@ -1,14 +1,16 @@
 /**
- * 自動進行の判断と、演出のための待ち時間。
+ * 自動進行の1手を「演出のための遅延つき」で返す UI アダプタ。
  *
- * 「次に誰が何をするか」を純粋関数として切り出しておくことで、
- * CPU の手番・宣言・割り込みの振る舞いを jsdom なしで単体テストできる。
+ * 判断そのもの（誰が次に何をするか）は engine の純関数 `nextCpuAction`（`src/engine/autoAction.ts`）へ委譲し、
+ * ここでは決まった action の種別から演出遅延を付けるだけ。候補列挙 `claimableFor` / `declarableFor` は
+ * engine 側に置き、消費側の import パスを保つためここから re-export する。
  */
 
-import { chooseDiscard, decideClaim, decideDeclare, toAiView, type AiConfig } from '../../engine/ai'
-import { findYaku } from '../../engine/yaku'
-import { yakuContextOf } from '../../engine/gameSelectors'
+import type { AiConfig } from '../../engine/ai'
+import { nextCpuAction, pendingCpuClaimIds, type CpuAction } from '../../engine/autoAction'
 import type { Action, GameState, PlayerId, RulesConfig, YakuCandidate } from '../../engine/types'
+
+export { claimableFor, declarableFor } from '../../engine/autoAction'
 
 /** 自動進行の1手。`delayMs` は演出のための待ち時間で、エンジンには渡らない。 */
 export interface AutoStep {
@@ -51,76 +53,46 @@ export const NO_DELAYS: Delays = {
 /** 役成立のトーストを表示しておく時間。 */
 export const EVENT_HOLD_MS = 1600
 
-// --- 自動進行の判断 -----------------------------------------------------------
+// --- 自動進行の判断（engine へ委譲） -----------------------------------------
 
 /**
- * 人間が割り込める役。`claimWindow` 以外では空になる。
- *
- * `ai.ts` の `decideClaim` は `bestYaku` で最良の1件に絞ってしまうため、
- * 人間に選ばせる用途には使えない。`findYaku` を直接呼ぶ。
+ * 決まった action の種別に対応する演出遅延。元の `decideAutoAction` 各分岐の遅延と1:1で対応する。
+ * `nextCpuAction` は TICK を返さない（型 `CpuAction` で保証）ので、TICK のケースは書かず `never` で網羅する。
  */
-export function claimableFor(
-  game: GameState,
-  rules: RulesConfig,
-  playerId: PlayerId,
-): YakuCandidate[] {
-  if (game.phase !== 'claimWindow' || game.lastDiscard === null) {
-    return []
+function delayFor(action: CpuAction, delays: Delays): number {
+  switch (action.type) {
+    case 'DRAW':
+      return delays.draw
+    case 'DISCARD':
+      return delays.discard
+    case 'DECLARE':
+      return delays.declare
+    case 'SKIP_DECLARE':
+      return delays.skipDeclare
+    case 'CLAIM':
+    case 'PASS':
+      return delays.claim
+    default: {
+      const exhaustive: never = action
+      throw new Error(`未知のアクション種別です: ${JSON.stringify(exhaustive)}`)
+    }
   }
-  if (game.claims[playerId] !== null) {
-    return []
-  }
-
-  const hand = game.players[playerId].hand
-  return findYaku([...hand, game.lastDiscard], yakuContextOf(game, rules), game.lastDiscard)
-}
-
-/** 人間が宣言できる役（ツモ）。`selfDeclare` で宣言権を持つとき以外は空。 */
-export function declarableFor(
-  game: GameState,
-  rules: RulesConfig,
-  playerId: PlayerId,
-): YakuCandidate[] {
-  if (game.phase !== 'selfDeclare' || game.declarer !== playerId) {
-    return []
-  }
-  return findYaku(game.players[playerId].hand, yakuContextOf(game, rules))
-}
-
-/**
- * `claimWindow` で次に処理すべき CPU を返す。
- *
- * **人間を飛ばして CPU を先に処理するのが要点。** `claims` のキーは `PlayerId`（数値）で、
- * `Object.entries` は整数キーを昇順で返すため、素朴に「最初の未表明者」を採ると
- * 既定の人間席（0番）が常に先に来てしまい、人間が決めるまで CPU の意思表示が発行されない。
- */
-function pendingCpuClaimIds(game: GameState, humanSeat: PlayerId): PlayerId[] {
-  return Object.keys(game.claims)
-    .map(Number)
-    .sort((a, b) => a - b)
-    .filter((id) => id !== humanSeat && game.claims[id] === null)
-}
-
-function nextPendingCpu(game: GameState, humanSeat: PlayerId): PlayerId | null {
-  return pendingCpuClaimIds(game, humanSeat)[0] ?? null
 }
 
 /**
  * まだ意思表示していない CPU の数。
  *
  * 「CPU は人間の入力を待たない」という性質を画面から観測できるようにするために公開している
- * （`claims` の内部構造の知識を画面側に持たせない）。
+ * （`claims` の内部構造の知識を画面側に持たせない）。判断は engine の `pendingCpuClaimIds` に委譲する。
  */
 export function countPendingCpuClaims(game: GameState, humanSeat: PlayerId): number {
-  return pendingCpuClaimIds(game, humanSeat).length
+  return pendingCpuClaimIds(game, [humanSeat]).length
 }
 
 /**
- * 次に自動で進めるべき1手を決める。`null` なら人間の入力待ち。
+ * 次に自動で進めるべき1手を、演出遅延つきで返す。`null` なら人間の入力待ち。
  *
- * 対象プレイヤーはフェーズによって異なる。`selfDeclare` は宣言権者（`declarer`）、
- * `draw` / `discard` は手番（`turn`）。ロンによる連続宣言中は両者が食い違うため、
- * ここを取り違えると誤ったプレイヤーを操作してしまう。
+ * 判断は engine の `nextCpuAction` に委譲し、ここでは種別に応じた遅延を付けるだけ。
  */
 export function decideAutoAction(
   game: GameState,
@@ -129,69 +101,8 @@ export function decideAutoAction(
   humanSeat: PlayerId,
   delays: Delays = DELAYS,
 ): AutoStep | null {
-  switch (game.phase) {
-    case 'gameOver':
-      return null
-
-    // 引くのは選択ではないので、人間の手番でも自動で行う。
-    case 'draw':
-      return { action: { type: 'DRAW' }, delayMs: delays.draw }
-
-    case 'selfDeclare': {
-      const declarer = game.declarer
-
-      if (declarer === humanSeat) {
-        // 役が0件のときに「見送る」を押させるのは無意味な操作なので自動で通過する。
-        const candidates = declarableFor(game, rules, humanSeat)
-        return candidates.length === 0
-          ? { action: { type: 'SKIP_DECLARE' }, delayMs: delays.skipDeclare }
-          : null
-      }
-
-      const candidate = decideDeclare(toAiView(game, declarer, rules))
-      return candidate === null
-        ? { action: { type: 'SKIP_DECLARE' }, delayMs: delays.skipDeclare }
-        : { action: { type: 'DECLARE', playerId: declarer, candidate }, delayMs: delays.declare }
-    }
-
-    case 'discard': {
-      if (game.turn === humanSeat) {
-        return null
-      }
-      const card = chooseDiscard(toAiView(game, game.turn, rules), ai)
-      return { action: { type: 'DISCARD', uid: card.uid }, delayMs: delays.discard }
-    }
-
-    case 'claimWindow': {
-      const discard = game.lastDiscard
-      if (discard === null) {
-        return null
-      }
-
-      // CPU を先に処理し切る。人間が考えている間も他家の判断を進めるため。
-      const cpu = nextPendingCpu(game, humanSeat)
-      if (cpu !== null) {
-        const candidate = decideClaim(toAiView(game, cpu, rules), discard)
-        return candidate === null
-          ? { action: { type: 'PASS', playerId: cpu }, delayMs: delays.claim }
-          : { action: { type: 'CLAIM', playerId: cpu, candidate }, delayMs: delays.claim }
-      }
-
-      // 残りは人間だけ。割り込める役がなければ待たせる意味がないので自動でパスする
-      // （`selfDeclare` で役がないときに自動通過させるのと同じ理由）。
-      if (game.claims[humanSeat] !== null) {
-        return null
-      }
-      return claimableFor(game, rules, humanSeat).length === 0
-        ? { action: { type: 'PASS', playerId: humanSeat }, delayMs: delays.claim }
-        : null
-    }
-
-    default: {
-      const exhaustive: never = game.phase
-      throw new Error(`未知のフェーズです: ${String(exhaustive)}`)
-    }
-  }
+  const action = nextCpuAction(game, rules, ai, [humanSeat])
+  return action === null ? null : { action, delayMs: delayFor(action, delays) }
 }
 
 /**
