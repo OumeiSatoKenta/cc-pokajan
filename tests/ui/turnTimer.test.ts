@@ -1,10 +1,28 @@
 import { describe, expect, it } from 'vitest'
 
-import { autoDiscardUid, decideTimeout, nextTimeLimitMs } from '../../src/ui/hooks/turnTimer'
+import { toPlayerView } from '../../src/engine/playerView'
+import type { GameState, PlayerId, RulesConfig } from '../../src/engine/types'
+import {
+  autoDiscardUid,
+  decideTimeoutFromView,
+  nextTimeLimitMs,
+} from '../../src/ui/hooks/turnTimer'
 import { createCardSource, gameState, testRules } from '../helpers/game'
 import { hand } from '../helpers/cards'
 
 const HUMAN = 0
+
+/**
+ * Step 6 で `decideTimeout` は `PlayerView` を取る `decideTimeoutFromView` に置き換わった。
+ * テストは `GameState` を組み立てるので、`toPlayerView` を通して view にしてから渡す薄いラッパで受ける
+ * （時間切れ判定は自席視点の公開情報だけで決まるため、view 経由でも同じ結果になる）。
+ */
+const decideTimeout = (
+  state: GameState,
+  seat: PlayerId,
+  drawnUid: number | null,
+  rules: RulesConfig,
+) => decideTimeoutFromView(toPlayerView(state, seat), seat, drawnUid, rules)
 
 describe('nextTimeLimitMs', () => {
   const rules = testRules()

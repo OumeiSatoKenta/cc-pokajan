@@ -10,6 +10,10 @@
 
 import { canAfford, computePayout, rankOf, type PayoutBreakdown } from '../engine/payout'
 import type { PlayerId, RulesConfig } from '../engine/types'
+import type { OutcomeSummary } from './transport/transport'
+
+/** 財布の権威。`'server'`=AWS（サーバー値）/ `'local'`=Pages（prefs + computePayout）。 */
+export type WalletSource = 'local' | 'server'
 
 export type Screen = 'title' | 'bet' | 'table' | 'result' | 'roster' | 'rules' | 'players'
 
@@ -44,7 +48,13 @@ export type AppAction =
       readonly ranking: readonly PlayerId[]
       readonly scores: readonly number[]
       readonly humanSeat: PlayerId
+      /** server モードのサーバー精算内訳（local は null で `computePayout` を使う）。 */
+      readonly serverOutcome: OutcomeSummary | null
+      /** server モードの精算後サーバー財布（local はダミー）。 */
+      readonly serverWallet: number
     }
+  /** server モードで、サーバー権威の財布を反映する（BET 差引後・精算後など。local では dispatch しない）。 */
+  | { readonly type: 'SYNC_WALLET'; readonly wallet: number }
   | { readonly type: 'TOP_UP' }
 
 export interface CreateAppStateOptions {
@@ -74,6 +84,7 @@ export function needsTopUp(wallet: number, rules: RulesConfig): boolean {
 
 export function createAppReducer(
   rules: RulesConfig,
+  walletSource: WalletSource,
 ): (state: AppState, action: AppAction) => AppState {
   return (state, action) => {
     switch (action.type) {
@@ -97,22 +108,53 @@ export function createAppReducer(
           return state
         }
 
-        // **BET はこの時点で引く。** 精算時にまとめて差額を足す方式だと、
-        // 対局を中断してタブを閉じるだけで負けを帳消しにできてしまう。
+        // **local は BET をこの時点で引く**（精算時にまとめて足す方式だと、対局を中断してタブを閉じるだけで
+        // 負けを帳消しにできる）。**server は控除しない**（サーバーが createGame で debit し、その後の snapshot の
+        // wallet を SYNC_WALLET で反映する）。→ create 失敗時も控除が無いので残高固着が起きない。
+        const wallet = walletSource === 'server' ? state.wallet : state.wallet - action.amount
         return {
           ...state,
           screen: 'table',
-          wallet: state.wallet - action.amount,
+          wallet,
           bet: action.amount,
           outcome: null,
         }
       }
+
+      case 'SYNC_WALLET':
+        // server 権威の財布を反映する（server モードでのみ dispatch される）。
+        // **値が同じなら同一参照を返す**（無駄な再レンダーを止める保険。onWalletSync の無限ループ対策の第2層）。
+        return action.wallet === state.wallet ? state : { ...state, wallet: action.wallet }
 
       case 'FINISH': {
         const bet = state.bet
         if (bet === null || state.screen !== 'table') {
           // BET を経由していない対局は精算しない。
           return state
+        }
+
+        if (walletSource === 'server') {
+          // **サーバー精算。** 順位・点数・内訳・財布はすべてサーバー値（`computePayout` を再計算しない＝
+          // localStorage 改竄が精算に効かない）。server モードなのに outcome が無いのは異常なので、黙って
+          // local 計算へ落とさず精算を進めない（結果画面へ嘘の額を出さない）。
+          const serverOutcome = action.serverOutcome
+          if (serverOutcome === null) {
+            return state
+          }
+          return {
+            screen: 'result',
+            seed: state.seed + 1,
+            wallet: action.serverWallet,
+            bet: null,
+            outcome: {
+              payout: serverOutcome.payout,
+              ranking: serverOutcome.ranking,
+              scores: serverOutcome.scores,
+              humanSeat: action.humanSeat,
+              walletBefore: state.wallet,
+              walletAfter: action.serverWallet,
+            },
+          }
         }
 
         const rank = rankOf(action.ranking, action.humanSeat)

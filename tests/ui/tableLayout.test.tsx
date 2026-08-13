@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { PlayerSeat } from '../../src/ui/components/PlayerSeat'
 import type { OpponentOrientation } from '../../src/ui/components/PlayerSeat'
 import { hand } from '../helpers/cards'
-import type { MemberId, Player } from '../../src/engine/types'
+import type { PlayerSummary } from '../../src/engine/playerView'
+import type { MemberId } from '../../src/engine/types'
 
 /**
  * 卓レイアウト（Step 7-2）の検証。
@@ -23,11 +24,11 @@ const NAMES: ReadonlyMap<MemberId, string> = new Map([
 const IMAGES: ReadonlyMap<MemberId, string> = new Map([['a1', 'blob:image-a1']])
 const SYMBOLS: ReadonlyMap<MemberId, string> = new Map([['a1', 'ス']])
 
-function player(overrides: Partial<Player> = {}): Player {
+function player(overrides: Partial<PlayerSummary> = {}): PlayerSummary {
   return {
     id: 1,
     isCpu: true,
-    hand: hand('a1:pink a2:blue a3:orange'),
+    handCount: 3,
     score: 12_000,
     discards: [],
     declared: [],
@@ -37,7 +38,7 @@ function player(overrides: Partial<Player> = {}): Player {
 
 function seat(
   orientation: OpponentOrientation,
-  overrides: Partial<Player> = {},
+  overrides: Partial<PlayerSummary> = {},
   avatarUrl?: string,
   highlightLast = false,
 ): string {
@@ -77,23 +78,25 @@ describe('PlayerSeat — 席の向き', () => {
 
 describe('PlayerSeat — 席が持つ情報', () => {
   it('伏せ札の枚数が手札の枚数と一致する', () => {
-    const html = seat('top', { hand: hand('a1:pink a2:blue a3:orange a1:blue') })
+    const html = seat('top', { handCount: 4 })
 
     expect(html).toContain('data-count="4"')
     expect(html.match(/data-testid="card-back"/g)).toHaveLength(4)
   })
 
   /**
-   * **7-1 で得た性質の維持。** 他家の手札は `GameState.players[].hand` として
-   * UI から参照できるので、席を組み替えたときに漏れ経路が生まれていないかを見る。
+   * **7-1 で得た性質の維持（Step 6 で型による保証に格上げ）。** 他家は `PlayerSummary`（`handCount` のみ・
+   * `hand` フィールドを持たない）で渡るため、席の出力に手札の中身が入る経路は**型として存在しない**。
+   * 河のメンバー（公開情報）は出てよい。
    */
   it('席の出力に他家の手札の中身が含まれない', () => {
-    // 手札にだけ居るメンバーを置き、河には別のメンバーだけを置く
+    // handCount だけ渡す（手札の中身を渡す術がない）。河には別のメンバーだけを置く。
     const html = seat('left', {
-      hand: hand('a1:pink a2:blue'),
+      handCount: 2,
       discards: hand('a3:orange'),
     })
 
+    // 手札にしか居ないメンバー（アオイ/ヒナタ）は席に一切現れない。
     expect(html).not.toContain('アオイ')
     expect(html).not.toContain('ヒナタ')
     expect(html).not.toContain('blob:image-a1')

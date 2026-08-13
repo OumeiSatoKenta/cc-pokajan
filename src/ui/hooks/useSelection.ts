@@ -6,17 +6,18 @@
  * 「確定先（declare/claim）」「確定ボタンの種別」の4点だけで、残りは共通なので1フックにまとめる。
  * これにより `TableScreen` を 400 行未満に保ち、`canDiscard`（`useGameLoop`）と選択可否の非対称も解消する。
  *
- * **和了演出中は選べない**（`pendingWin !== null`）。演出中も `game.state` は連続宣言で次の
- * `selfDeclare`/`discard` へ進みうるため、`.overlay` が奪えないキーボード経路で手札を触れてしまう。
- * ゲート判定は純関数 `interactionGate`（`../selection`）に出し、操作バー側（`actionBarItems` の
- * `isPaused`）と**同じ `pendingWin` 判定を共有**して、7-4 の「効果を止めるだけでは足りない＝両層で
- * 止める」を手札とボタンの両方で漏れなく閉じる。
+ * Step 6 で `useGameLoop` は `PlayerView` を返すため、選択も `loop.view`（自席の手札は `view.hand`）から組む。
+ *
+ * **和了演出中は選べない**（`pendingWin !== null`）。演出中も view は連続宣言で次の `selfDeclare`/`discard` へ
+ * 進みうるため、`.overlay` が奪えないキーボード経路で手札を触れてしまう。ゲート判定は純関数 `interactionGate`
+ * （`../selection`）に出し、操作バー側（`actionBarItems` の `isPaused`）と**同じ `pendingWin` 判定を共有**して、
+ * 7-4 の「効果を止めるだけでは足りない＝両層で止める」を手札とボタンの両方で漏れなく閉じる。
  */
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { yakuContextOf } from '../../engine/gameSelectors'
 import { candidateFromSelection } from '../../engine/yakuSelection'
+import { yakuContextFromView } from '../../engine/viewDerive'
 import type { RulesConfig, YakuCandidate } from '../../engine/types'
 import type { SelectionPreviewProps } from '../components/SelectionPreview'
 import type { GameLoop } from './useGameLoop'
@@ -51,26 +52,28 @@ export interface HandSelection {
  * `null` にするため、常に役にならなくなる）。
  */
 export function useSelection(loop: GameLoop, rules: RulesConfig): HandSelection {
-  const { state } = loop
-  const me = state.players[loop.humanSeat]
-  const lastDiscard = state.lastDiscard
+  const view = loop.view
+  const lastDiscard = view?.lastDiscard ?? null
 
   /*
    * 手札操作のゲート。ツモ／ロンの選択可否と手札タップの意味を純関数で一括判定する
-   * （`decideAutoAction`/`decideTimeout` と同じく、判断は `useState`/`useEffect` から切り離して
+   * （`decideAutoAction`/`decideTimeoutFromView` と同じく、判断を `useState`/`useEffect` から切り離して
    * 単体テスト可能にする）。**和了演出中（`pendingWin !== null`）は全操作を止める**（`interactionGate` が
-   * canDeclare/canClaim/interaction を一斉に落とす）。
+   * canDeclare/canClaim/interaction を一斉に落とす）。view 未取得（remote の create 前）も全操作を落とす。
    */
-  const { canDeclare, canClaim, interaction } = interactionGate({
-    phase: state.phase,
-    declarer: state.declarer,
-    humanSeat: loop.humanSeat,
-    isPaused: loop.pendingWin !== null,
-    isClaimWindowOpen: loop.isClaimWindowOpen,
-    claimableCount: loop.claimable.length,
-    hasLastDiscard: lastDiscard !== null,
-    canDiscard: loop.canDiscard,
-  })
+  const { canDeclare, canClaim, interaction } =
+    view === null
+      ? { canDeclare: false, canClaim: false, interaction: 'none' as const }
+      : interactionGate({
+          phase: view.phase,
+          declarer: view.declarer,
+          humanSeat: loop.humanSeat,
+          isPaused: loop.pendingWin !== null,
+          isClaimWindowOpen: loop.isClaimWindowOpen,
+          claimableCount: loop.claimable.length,
+          hasLastDiscard: lastDiscard !== null,
+          canDiscard: loop.canDiscard,
+        })
   const canSelect = canDeclare || canClaim
 
   const [selectedUids, setSelectedUids] = useState<readonly number[]>([])
@@ -80,35 +83,38 @@ export function useSelection(loop: GameLoop, rules: RulesConfig): HandSelection 
   /*
    * 選択が作る役。**プレビューと確定活性の単一の真実**。無効なら `null`。
    * `candidateFromSelection`（エンジン）が選んだカードから役種・同色・点数を再導出する。
-   * 依存に `state` を丸ごと置く（`yakuContextOf` が `activeGroups` 等を読むため）。ツモでは他家が
+   * 依存に `view` を丸ごと置く（`yakuContextFromView` が `activeGroups` 等を読むため）。ツモでは他家が
    * 動かないので再計算は自分の手札・選択だけで起きるが、ロン受付中は他家 CPU の claim/pass 確定で
-   * `state` が変わりうる。ただし `canClaim`/`me.hand`/`lastDiscard`/`selectedUids` が同じ限り
+   * view が変わりうる。ただし `canClaim`/`hand`/`lastDiscard`/`selectedUids` が同じ限り
    * **再計算しても結果は同じ値**になるだけなので、`composed` は安定する。
    */
   const composed = useMemo(() => {
-    if (canDeclare) {
-      return candidateFromSelection(me.hand, selectedUids, yakuContextOf(state, rules))
+    if (view === null) {
+      return null
     }
-    if (canClaim && lastDiscard !== null) {
+    if (canDeclare) {
+      return candidateFromSelection(view.hand, selectedUids, yakuContextFromView(view, rules))
+    }
+    if (canClaim && view.lastDiscard !== null) {
       // 捨て札を固定要素として合流。required=捨て札 で「反手内成立でロン不可」も課す。
       return candidateFromSelection(
-        [...me.hand, lastDiscard],
-        [...selectedUids, lastDiscard.uid],
-        yakuContextOf(state, rules),
-        lastDiscard,
+        [...view.hand, view.lastDiscard],
+        [...selectedUids, view.lastDiscard.uid],
+        yakuContextFromView(view, rules),
+        view.lastDiscard,
       )
     }
     return null
-  }, [canDeclare, canClaim, me.hand, lastDiscard, selectedUids, state, rules])
+  }, [view, canDeclare, canClaim, selectedUids, rules])
 
   /*
    * 局面が変わった瞬間に選択を空へ戻す（`WaitPanel` の pinned 生存バグと同型。「常にマウントされ
    * 続ける」に依存した正しさは崩れる）。境界は `resetKeyOf`（`phase/turn/declarer/chainCount`）に畳んで
-   * 純関数として単体検証する。**この鍵が境界を尽くせるのは、エンジンが連続宣言／ロン確定で
-   * `declarer`/`chainCount` を演出キュー投入より先に同期更新するため**（`win.ts`・`game.ts` の
-   * `resolveClaims`）。将来この順序が変わると鍵が遅れて選択が残留しうる（その時はここが最初に壊れる）。
+   * 純関数として単体検証する。`resetKeyOf` は `Pick<GameState,…>` で受けるため `PlayerView` を無改修で渡せる。
+   * **この鍵が境界を尽くせるのは、エンジンが連続宣言／ロン確定で `declarer`/`chainCount` を演出キュー投入より
+   * 先に同期更新するため**（`win.ts`・`game.ts` の `resolveClaims`）。将来この順序が変わると鍵が遅れる。
    */
-  const resetKey = resetKeyOf(state)
+  const resetKey = view === null ? 'none' : resetKeyOf(view)
   useEffect(() => {
     setSelectedUids([])
   }, [resetKey])

@@ -1,4 +1,5 @@
-import type { MemberId, Player } from '../../engine/types'
+import type { PlayerSummary } from '../../engine/playerView'
+import type { MemberId } from '../../engine/types'
 import { CardBack } from './CardBack'
 import { DiscardPile } from './DiscardPile'
 
@@ -6,7 +7,8 @@ import { DiscardPile } from './DiscardPile'
 export type OpponentOrientation = 'top' | 'left' | 'right'
 
 export interface PlayerSeatProps {
-  readonly player: Player
+  /** 他家の公開情報（`PlayerView.players[]`）。**手札の中身を持たない**（`handCount` のみ）。 */
+  readonly player: PlayerSummary
   readonly memberNameById: ReadonlyMap<MemberId, string>
   /** 河のカードに出す画像と記号。手札と同じ見え方にそろえる。 */
   readonly imageUrlById?: ReadonlyMap<MemberId, string>
@@ -73,11 +75,11 @@ export function PlayerSeat({
       </header>
 
       {/*
-        伏せ札には `player.hand` を渡さない。枚数だけを渡すことで、
-        他家の手札の中身が UI へ到達する経路そのものを断つ。
+        伏せ札は `handCount`（枚数）だけで積む。`PlayerSummary` はそもそも手札の中身を持たない
+        （`PlayerView` の redaction 境界で落としてある）ため、他家の手札が UI へ到達する経路が型として存在しない。
       */}
       <CardBack
-        count={player.hand.length}
+        count={player.handCount}
         orientation={orientation === 'top' ? 'horizontal' : 'vertical'}
         label={`${seatLabel}の伏せ札`}
       />
