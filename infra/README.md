@@ -85,15 +85,16 @@ terraform output           # cloudfront_domain_name / cloudfront_distribution_id
 
 リポジトリの **Settings → Environments** で `dev` と `prod` を作り、各環境に **Variables**（Secrets ではなく Variables で可）を設定:
 
-| 変数                             | 値の出所                                               |
-| -------------------------------- | ------------------------------------------------------ |
-| `AWS_DEPLOY_ROLE_ARN`            | bootstrap output `deploy_role_arns` の**その環境の値** |
-| `AWS_REGION`                     | environment output `aws_region`                        |
-| `AWS_S3_BUCKET`                  | environment output `bucket_name`                       |
-| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | environment output `cloudfront_distribution_id`        |
-| `VITE_COGNITO_USER_POOL_ID`      | environment output `cognito_user_pool_id`              |
-| `VITE_COGNITO_APP_CLIENT_ID`     | environment output `cognito_app_client_id`             |
-| `AWS_LAMBDA_FUNCTION_NAME`       | environment output `game_api_function_name`（Step 5）  |
+| 変数                             | 値の出所                                                            |
+| -------------------------------- | ------------------------------------------------------------------- |
+| `AWS_DEPLOY_ROLE_ARN`            | bootstrap output `deploy_role_arns` の**その環境の値**              |
+| `AWS_REGION`                     | environment output `aws_region`                                     |
+| `AWS_S3_BUCKET`                  | environment output `bucket_name`                                    |
+| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | environment output `cloudfront_distribution_id`                     |
+| `VITE_COGNITO_USER_POOL_ID`      | environment output `cognito_user_pool_id`                           |
+| `VITE_COGNITO_APP_CLIENT_ID`     | environment output `cognito_app_client_id`                          |
+| `AWS_LAMBDA_FUNCTION_NAME`       | environment output `game_api_function_name`（Step 5）               |
+| `VITE_API_BASE_URL`              | environment output `game_api_endpoint`（Step 6・remote 対局に必須） |
 
 > DeployRole は環境ごとに分離されている。`dev` Environment には `deploy_role_arns["dev"]`、`prod` には `["prod"]` を設定する
 > （dev のロールは prod バケットへ届かない＝環境の取り違えで本番を汚染できない）。
@@ -178,5 +179,7 @@ done
   （初回 apply で `cloudfront_domain_name` が確定したら `environments/prod/terraform.tfvars` に
   `cors_allow_origins = ["https://<prod-cloudfront-domain>"]` を設定して再 apply）。Bearer 認証で Cookie 非依存のため
   `*` でも致命ではないが、金銭 API なので prod は明示オリジンにする。
-- **Lambda コード配線位置（Step 6 申し送り）**: フロントの remote transport は `VITE_API_BASE_URL`（= `game_api_endpoint`）を
-  GitHub Environment 変数に設定して build へ注入する。`amplifyIdToken` は AuthProvider マウント後（configure 済み）前提。
+- **Lambda コード配線位置（Step 6・配線済み）**: フロントの remote transport は `VITE_API_BASE_URL`（= `game_api_endpoint`）を
+  GitHub Environment 変数に設定して build へ注入する。`deploy-aws.yml` は build env にこれを渡し、未設定なら fail-closed で
+  デプロイを止める（remote 対局が API 未設定で落ちる白画面デプロイを防止）。`amplifyIdToken` は AuthProvider マウント後
+  （configure 済み）前提。

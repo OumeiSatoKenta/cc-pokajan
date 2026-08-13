@@ -42,21 +42,25 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      # Cognito 変数が未設定のままだと build は成功してしまう（Vite は undefined でも落ちない）が、
-      # 実行時に認証設定エラーになる。fail-closed でここでデプロイを止める（白画面デプロイの防止）。
-      - name: Cognito 変数の存在を確認
+      # 必須変数が未設定のままだと build は成功してしまう（Vite は undefined でも落ちない）が、実行時に
+      # 認証設定エラー／remote 対局の API 未設定エラーになる。fail-closed でここでデプロイを止める（白画面デプロイの防止）。
+      - name: AWS 版の必須変数を確認
         env:
           VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
           VITE_COGNITO_APP_CLIENT_ID: ${{ vars.VITE_COGNITO_APP_CLIENT_ID }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
         run: |
           test -n "$VITE_COGNITO_USER_POOL_ID" || { echo "::error::VITE_COGNITO_USER_POOL_ID が未設定です（GitHub Environment の Variables を設定）"; exit 1; }
           test -n "$VITE_COGNITO_APP_CLIENT_ID" || { echo "::error::VITE_COGNITO_APP_CLIENT_ID が未設定です"; exit 1; }
+          test -n "$VITE_API_BASE_URL" || { echo "::error::VITE_API_BASE_URL が未設定です（Step 6 remote 対局に必須。terraform output game_api_endpoint を設定）"; exit 1; }
       - run: npm run build # VITE_DEPLOY_TARGET=aws ＝ base '/'（サイトルート配信）で dist/ を生成
         env:
           VITE_DEPLOY_TARGET: aws
           # Cognito の公開値（Secrets ではなく環境ごとの Variables）。認証プールをビルドに焼き込む。
           VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
           VITE_COGNITO_APP_CLIENT_ID: ${{ vars.VITE_COGNITO_APP_CLIENT_ID }}
+          # game-api のベース URL（terraform output game_api_endpoint）。remote transport が Action を送る先。
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
       - run: npm run format:check
       # backend（game-api Lambda）を esbuild で単一バンドル化して zip にする。
       # esbuild は第三者コードなので AWS クレデンシャルの無い build ジョブで走らせる（deploy.yml と同じ防御姿勢）。
