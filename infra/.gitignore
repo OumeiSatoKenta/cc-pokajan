@@ -1,0 +1,14 @@
+# Terraform のローカル生成物・機密。state と backend 設定はコミットしない。
+# .terraform.lock.hcl は「コミットする」（root 構成のプロバイダ版・ハッシュ固定＝再現性/サプライチェーン検知）。
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# backend の実値（bucket 名にアカウント ID が入る）はコミットしない。*.example のみ共有する。
+backend.hcl
+
+# game-api module の archive_file 出力（placeholder.zip）。apply 時に生成されるだけでコミットしない。
+modules/game-api/build/

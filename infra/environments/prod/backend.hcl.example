@@ -1,0 +1,12 @@
+# cp backend.hcl.example backend.hcl して bootstrap の output で値を埋め、
+#   terraform init -backend-config=backend.hcl
+# で初期化する。backend.hcl 自体は .gitignore 済み（bucket 名にアカウント ID が入るため）。
+# ロックは S3 ネイティブ（use_lockfile=true は backend.tf に直書き済み。DynamoDB テーブルは不要）。
+
+bucket  = "cc-pokajan-tfstate-<ACCOUNT_ID>" # bootstrap output: state_bucket_name
+region  = "ap-northeast-1"
+encrypt = true
+
+# ★ key は dev/prod で必ず異なる値にする。同一 state バケットを共有するため、
+#   key を取り違えると一方の apply が他方の環境の実 CloudFront/S3 を上書き・破壊する。
+key = "env/prod/terraform.tfstate"
