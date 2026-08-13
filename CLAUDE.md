@@ -29,7 +29,20 @@ IndexedDB（画像 Blob）。サーバーは存在しない。
 - 100 局シミュレーション（`autoplay`/`unseenAutoplay`）は CI の遅い Runner で既定 5s を超えるため、
   `vite.config.ts` の `test.testTimeout` を 30s に設定してある。
 - 計画の一次資料は [docs/ideas/pokajan-github-pages-deploy-plan.md](docs/ideas/pokajan-github-pages-deploy-plan.md)。
-  有料版（AWS+Cognito）は別計画 `docs/ideas/pokajan-aws-portfolio-plan.md` として併存構想。
+
+### AWS 版（Pages と併存・Phase 1〜3 実装済み）
+
+計画は [docs/ideas/cc-pokajan-aws-deployment-plan-revised.md](docs/ideas/cc-pokajan-aws-deployment-plan-revised.md)、
+到達状況は [docs/architecture.md](docs/architecture.md) 冒頭の AWS ブロック。`VITE_DEPLOY_TARGET=aws` ビルドで
+**認証（Cognito）＋サーバー権威（Lambda/DynamoDB）＋フロント remote 化**まで到達済み（AWS Step 1〜6）。
+
+- **Step 6（remote 化）完了**: 対局遷移の差し替え点 `GameTransport`（`src/ui/transport/`）を `deployConfig.transport` で
+  local（ブラウザ内エンジン＝今日の挙動）/ remote（サーバー権威）に切替。`useGameLoop` は redact 済み `PlayerView` を描画。
+  **local（github-pages）経路は完全不変**が絶対条件（検証ゲート＋Playwright 91件で固定）。詳細は
+  `.steering/20260813-aws-step6-remote/`。
+- **未検証の穴**: 検証ゲートも Playwright も `github-pages` ビルドしか駆動しないため、`walletSource==='server'` /
+  `transport==='remote'` の分岐はどのテストからも評価されない（Step 6 レビューで server 分岐に [必須]4件が潜んでいた）。
+  **AWS ビルドを実ブラウザにマウントする E2E が唯一の機械的検出手段**（次段の宿題）。
 
 ## このプロジェクト固有のルール
 

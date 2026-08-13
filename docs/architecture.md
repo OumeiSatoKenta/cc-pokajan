@@ -10,6 +10,33 @@ CPU 対戦のみで通信の必要がなく、実在人物の顔写真を扱う�
 静的ホスティングだけで配布できる。この判断がストレージ・セキュリティ・
 スケーラビリティのすべての設計を規定している。
 
+> **AWS 版（別 target・段階導入中）**: 認証付き・サーバー権威型への拡張を、GitHub Pages 版と**併存する
+> 別デプロイ target** として計画している（[ideas/cc-pokajan-aws-deployment-plan-revised.md](ideas/cc-pokajan-aws-deployment-plan-revised.md)）。
+> AWS 版のみ `backend/`（npm workspace の Lambda）と `infra/`（Terraform・Step 3〜）を持つ。**GitHub Pages
+> 版は本書の「サーバーを持たない」構成を維持する**（`VITE_DEPLOY_TARGET` で切替・既定は github-pages）。
+>
+> **Step 3（静的配信）実装済み**: `VITE_DEPLOY_TARGET=aws` ビルドを **プライベート S3 ←(OAC)← CloudFront**
+> で配信する（バケットは完全非公開・当該ディストリビューションのみ `AWS:SourceArn` で読み取り許可、SPA rewrite で
+> 403/404→`/index.html`）。CI は **GitHub OIDC の環境別デプロイロール**（固定キー無し・dev/prod で信頼も権限も分離・
+> S3 sync + CloudFront invalidation のみの最小権限）を assume する。Terraform state は S3 + `use_lockfile`（S3 ネイティブロック）。
+> 詳細は [`infra/README.md`](../infra/README.md)。
+>
+> **Step 4（Cognito 認証）実装済み**: AWS 版のみ User Pool でログイン必須（aws-amplify は lazy chunk に隔離）。
+>
+> **Step 5（サーバー権威コア）実装済み**: `backend/`（npm workspace `@pokajan/game-api`）が **単一 HTTP API Lambda
+> （node22/arm64）** として `src/engine` を `@engine/*` で共有し（再実装なし）、GameState を **DynamoDB（1ゲーム=1item・
+> `version` 楽観ロック）** で権威化する。認可は **Cognito JWT authorizer**。クライアントには他家手札・山札・seed を含まない
+> **PlayerView**（＋ redact 済み events）だけを返す。wallet も **USER#sub item にサーバー権威化**（BET 差引・`computePayout` 精算）。
+> クライアントは Action だけを送る。**フロントの transport 差し替え（remote 化）は Step 6**（本 Step は backend + infra のみ）。
+>
+> **Step 6（フロント remote 化）実装済み**: 対局の状態遷移の差し替え点 **`GameTransport`**（`src/ui/transport/`）を入れ、
+> `deployConfig.transport` で **local**（ブラウザ内エンジン＝今日の挙動・Pages/オフライン）と **remote**（サーバー権威 HTTP）
+> を切り替える。`useGameLoop` は生の GameState でなく **redact 済み `PlayerView`** を描画し、注入された transport 経由で1手ずつ
+> 進める（責務分離: transport=権威ある状態遷移／`loopReducer`=snapshot の event 列を UI 状態へ折り込む）。派生値
+> （ツモ/ロン候補・待ち・残枚数）は `PlayerView` から導く `src/engine/viewDerive.ts` で算出（重い列挙は `findYaku` 等を共有）。
+> wallet も server モードはサーバー値を反映（`walletSource` 分岐・`computePayout` を再計算しない）。**local 経路は完全不変**
+> （検証ゲート＋Playwright 91件で固定）。※transport は `src/net/` でなく `src/ui/transport/` に置く（oxlint の net→engine/ui 禁止）。
+
 ## テクノロジースタック
 
 ### 言語・ランタイム
@@ -63,6 +90,9 @@ CPU 対戦のみで通信の必要がなく、実在人物の顔写真を扱う�
 ```
 ┌──────────────────────────────────────────────┐
 │  UI レイヤー  src/ui/, src/App.tsx            │ ← 入力の受付・描画・時間の管理
+│    └ src/ui/auth/  … AWS 版のログインゲート（aws-amplify・lazy chunk）
+├──────────────────────────────────────────────┤
+│  ネットワーク層  src/net/  (AWS 版のみ)        │ ← 出口 I/O（Bearer 付き fetch）。UI からのみ呼ぶ
 ├──────────────────────────────────────────────┤
 │  永続化レイヤー  src/storage/                  │ ← localStorage / IndexedDB
 ├──────────────────────────────────────────────┤
@@ -72,6 +102,15 @@ CPU 対戦のみで通信の必要がなく、実在人物の顔写真を扱う�
 └──────────────────────────────────────────────┘
         ↑ 依存の向きは常に下から上へは向かない
 ```
+
+> **`src/net/`（Step 4〜・AWS 版のみ）は「出口 I/O」層**。fetch と（動的 import 越しの）aws-amplify を持ち、UI からのみ
+> 呼ばれる。engine / config / storage からの `net` import は `.oxlintrc.json` で禁止し（net 自身も react/ui/engine/storage を
+> 禁止）、`npm run lint` が違反を検出する。`src/ui/auth/` は aws-amplify を **lazy chunk** に隔離し、`isAuthEnabled` 偽の
+> Pages 版では実行時に読み込まない（`postbuild` の `check-bundle-isolation` と E2E `auth.spec.ts` が機械的に固定）。
+
+> **transport seam（`src/ui/transport/`・Step 6〜）は UI 層に置く**。対局の状態遷移を差し替える `GameTransport` は
+> engine（local）と `src/net/apiClient`（remote）の両方に依存するが、`src/net/**` は oxlint で engine/ui import が禁止のため
+> net には置けない。UI 層（import 制限なし）に置き、`remoteTransport` が net の `authorizedFetch` を**使う**（依存の向き ui→net）。
 
 #### エンジンレイヤー（`src/engine/`）
 
@@ -145,7 +184,7 @@ UI がフェーズをポーリングして演出を組み立てるのではな�
 **返却されたイベント列を見る**。過渡フェーズ `resolveClaim` は `reduce` の
 戻り値には現れないため、フェーズだけを見ていると割り込みの発生を検知できない。
 
-### 情報遮断パターン（CPU AI）
+### 情報遮断パターン（CPU AI / プレイヤービュー）
 
 CPU は `GameState` を受け取らず、公開情報だけを含む `AiView` を受け取る。
 `toAiView(state, playerId, rules)` が `GameState` に触れる唯一の場所であり、
@@ -153,6 +192,18 @@ CPU は `GameState` を受け取らず、公開情報だけを含む `AiView` �
 
 これは「AI が不正しないよう気をつける」という規律ではなく、
 **不正できない構造**にすることで担保している。
+
+同じパターンを**プレイヤー向け**にも適用する。`toPlayerView(state, seat)`（`playerView.ts`）は
+`AiView` と同型の redaction で、自分の手札のみ・他家は枚数のみ・山札は残数のみ・`seed`（山札を再現できる）を
+含めない `PlayerView` を返す。AWS 版（Step 5）はこれをクライアントへ返し、GitHub Pages 版（Step 6）も
+同じ view を描画に使う。CPU 向け（`AiView`）とプレイヤー向け（`PlayerView`）で同じ「状態に触れるのは1関数だけ」の
+構造を共有している。
+
+**redaction は view だけでなく `events` にも効かせる。** サーバー権威（Step 5）が返す演出用 `GameEvent[]` には、
+CPU の引き札（`CardDrawn`）・補充札（`Refilled`）＝他家の実カードが混ざりうる。`redactEvents(events, seat)`
+（`playerView.ts`・第2の redaction 境界）が `playerId !== seat` の当該2種を除外する。**view だけ redact して生 events を
+返すと漏れる**ため、サーバーは `GameSnapshot` を組む唯一の経路（`buildSnapshot`）で必ず両方を通す。差分オラクル
+（redact しなければ本当に漏れることを生 JSON と比較）を engine 層・backend 層の両方のテストで固定している。
 
 ## データ永続化戦略
 
@@ -411,5 +462,10 @@ npm run lint && npm run typecheck && npm test && npm run build && npm run format
 3. **エンジンレイヤーには実行時依存を追加しない**。純粋 TS のまま保つ
 4. 追加する場合は用途を本書の表に記録する
 
-**現在の実行時依存は react / react-dom の2つのみ**（framer-motion を除く）。
+**Pages 版の実行時依存は react / react-dom の2つのみ**（framer-motion を除く）。
 ゲームロジック全体が外部依存ゼロで動作する。
+
+> **AWS 版のみ `aws-amplify`（Step 4〜）を持つ**。ただし **lazy chunk に隔離**し、`deployConfig.isAuthEnabled` が偽の
+> Pages 版では実行時に読み込まれない（E2E `tests/e2e/auth.spec.ts` がネットワークで固定）。本節の「外部通信しない／秘密情報を
+> 保持しない」も **Pages 版の言明**で、AWS 版は Cognito と通信し、idToken を `apiClient` の `Authorization` ヘッダに載せる
+> （その1箇所のみ・ログ等には出さない）。
